@@ -1,0 +1,8 @@
+Model Information:
+* title:	Shotgun
+* source:	https://sketchfab.com/3d-models/shotgun-63fd630ab02341c09c5bb50f055f5e6a
+* author:	Charckes (https://sketchfab.com/charlesmoch)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

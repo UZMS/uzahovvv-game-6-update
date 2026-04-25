@@ -1,0 +1,2917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12th Precinct</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #050505; }
+        canvas { display: block; }
+        
+        #blocker {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        #instructions { text-align: center; color: #ccc; font-family: monospace; }
+        #instructions h1 { font-size: 36px; margin-bottom: 20px; }
+        #instructions p { font-size: 16px; margin: 5px 0; }
+
+        /* Bodycam overlay effects */
+        #bodycam-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 50;
+            /* Тёмный градиентный фон с лёгким шумом */
+            background: 
+                radial-gradient(ellipse at center, rgba(30,35,40,0.3) 0%, rgba(10,12,15,0.6) 60%, rgba(5,5,8,0.9) 100%),
+                linear-gradient(to bottom, rgba(20,22,25,0.15) 0%, transparent 30%, transparent 70%, rgba(15,18,22,0.2) 100%);
+        }
+        
+        /* Виньетирование - мягкое затемнение по краям */
+        #bodycam-overlay::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.4) 70%, rgba(0,0,0,0.85) 100%);
+            pointer-events: none;
+        }
+
+        /* Flashlight overlay - луч фонаря как в Dying Light */
+        #flashlight-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 55;
+            opacity: 0;
+            transition: opacity 0.15s ease-out;
+            /* Тёмные края, прозрачный центр (луч света) */
+            background: radial-gradient(
+                ellipse at center,
+                transparent 0%,
+                transparent 10%,
+                rgba(0, 0, 0, 0.15) 25%,
+                rgba(0, 0, 0, 0.5) 50%,
+                rgba(0, 0, 0, 0.8) 75%,
+                rgba(0, 0, 0, 0.95) 100%
+            );
+        }
+        #flashlight-overlay.active {
+            opacity: 1;
+        }
+
+        /* Bodycam HUD */
+        #hud {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 60;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Recording indicator - приглушённый, профессиональный */
+        #rec-indicator {
+            position: absolute; top: 25px; left: 25px;
+            display: flex; align-items: center; gap: 8px;
+            color: rgba(231, 76, 60, 0.9);
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 0 0 6px rgba(231, 76, 60, 0.4);
+            background: rgba(0, 0, 0, 0.35);
+            padding: 6px 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(231, 76, 60, 0.2);
+        }
+        #rec-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #E74C3C;
+            animation: blink 1s ease-in-out infinite;
+            box-shadow: 0 0 6px rgba(231, 76, 60, 0.6);
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
+        /* Timestamp - приглушённый с подложкой */
+        #timestamp {
+            position: absolute; bottom: 25px; left: 25px;
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 13px;
+            letter-spacing: 1.5px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 5px 10px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Camera ID - приглушённый с подложкой */
+        #camera-id {
+            position: absolute; top: 25px; right: 25px;
+            color: rgba(255, 255, 255, 0.65);
+            font-size: 11px;
+            text-align: right;
+            line-height: 1.6;
+            letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Crosshair - dot instead of crosshair */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px; height: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            box-shadow: 0 0 3px rgba(255, 255, 255, 0.5);
+        }
+        #crosshair::before, #crosshair::after {
+            display: none;
+        }
+
+        /* Lens distortion border - enhanced bodycam lens effect */
+        #lens-border {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 51;
+            box-shadow: 
+                inset 0 0 200px rgba(0,0,0,0.95),
+                inset 0 0 100px rgba(0,0,0,0.8),
+                inset 0 0 50px rgba(0,0,0,0.5);
+            border-radius: 50px;
+        }
+
+        /* HUD info bars - приглушённые с подложкой */
+        #battery {
+            position: absolute; bottom: 25px; right: 25px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 6px 10px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        #battery-icon {
+            width: 28px; height: 14px; border: 1.5px solid rgba(255, 255, 255, 0.5);
+            position: relative; padding: 2px;
+            border-radius: 2px;
+        }
+        #battery-icon::after {
+            content: ''; position: absolute; right: -4px; top: 50%;
+            transform: translateY(-50%); width: 3px; height: 7px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 0 1px 1px 0;
+        }
+        #battery-level {
+            height: 100%; width: 75%; background: #00CC66;
+            border-radius: 1px;
+        }
+
+        /* Ammo display - приглушённый с подложкой */
+        #ammo-display {
+            position: absolute;
+            bottom: 25px;
+            right: 110px;
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            background: rgba(0, 0, 0, 0.35);
+            padding: 6px 14px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Weapon indicator - приглушённый */
+        #weapon-indicator {
+            position: absolute;
+            bottom: 75px;
+            right: 25px;
+            color: rgba(255, 255, 255, 0.45);
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+            background: rgba(0, 0, 0, 0.25);
+            padding: 4px 10px;
+            border-radius: 3px;
+        }
+
+        /* Stamina Bar */
+        #stamina-container {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            width: 200px;
+            opacity: 0;
+            transition: all 0.3s ease-out;
+            pointer-events: none;
+            z-index: 65;
+        }
+
+        #stamina-container.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        #stamina-bar-bg {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        #stamina-bar-fill {
+            height: 100%;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 2px;
+            transition: width 0.1s linear, background 0.3s ease;
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+        }
+
+        #stamina-bar-fill.low {
+            background: rgba(255, 80, 80, 0.9);
+            box-shadow: 0 0 12px rgba(255, 50, 50, 0.6);
+        }
+
+        #stamina-label {
+            color: rgba(255, 255, 255, 0.85);
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            text-align: center;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+            font-weight: bold;
+        }
+
+        #stamina-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 1px;
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 0 8px rgba(0, 0, 0, 0.8);
+        }
+
+        #stamina-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.95) 0%, rgba(220, 220, 220, 1) 30%, rgba(255, 255, 255, 1) 50%, rgba(220, 220, 220, 1) 70%, rgba(255, 255, 255, 0.95) 100%);
+            transition: width 0.08s linear;
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.7), 0 0 20px rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        #stamina-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, transparent 100%);
+            border-radius: 1px;
+        }
+
+        #stamina-fill.low {
+            background: linear-gradient(90deg, rgba(255, 60, 60, 0.95) 0%, rgba(255, 120, 120, 1) 30%, rgba(255, 80, 80, 1) 50%, rgba(255, 120, 120, 1) 70%, rgba(255, 60, 60, 0.95) 100%);
+            box-shadow: 0 0 15px rgba(255, 30, 30, 0.8), 0 0 25px rgba(255, 30, 30, 0.4), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+            animation: staminaPulse 0.4s ease-in-out infinite;
+        }
+
+        @keyframes staminaPulse {
+            0%, 100% { opacity: 1; filter: brightness(1); }
+            50% { opacity: 0.7; filter: brightness(1.3); }
+        }
+
+        /* Sprint indicator */
+        #sprint-indicator {
+            position: fixed;
+            bottom: 45px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.5);
+            font-family: 'Courier New', monospace;
+            font-size: 8px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            z-index: 65;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+        }
+
+        #sprint-indicator.visible {
+            opacity: 1;
+        }
+
+        /* Notification */
+        #notification {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: linear-gradient(135deg, rgba(255, 100, 0, 0.95), rgba(255, 50, 0, 0.95));
+            color: #fff;
+            padding: 10px 25px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            z-index: 500;
+            opacity: 0;
+            transition: all 0.2s ease-out;
+            pointer-events: none;
+            text-transform: uppercase;
+            border: 1px solid rgba(255, 200, 0, 0.5);
+            box-shadow: 0 0 20px rgba(255, 100, 0, 0.5), 0 0 40px rgba(255, 50, 0, 0.3), inset 0 -2px 0 rgba(255, 200, 0, 0.3);
+            text-shadow: 0 0 10px rgba(255, 200, 0, 0.8);
+        }
+
+        #notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Bodycam effects overlay -->
+    <div id="bodycam-overlay"></div>
+    <div id="lens-border"></div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div id="rec-indicator">
+            <div id="rec-dot"></div>
+            <span>REC</span>
+        </div>
+        <div id="timestamp"></div>
+        <div id="camera-id">
+            BODYCAM #4721<br>
+            OFFICER: J. DOE<br>
+            PRECINCT: 12TH
+        </div>
+        <div id="crosshair"></div>
+        <div id="battery">
+            <span>75%</span>
+            <div id="battery-icon"><div id="battery-level"></div></div>
+        </div>
+        <div id="ammo-display">7 / 7</div>
+        <div id="weapon-indicator">PISTOL</div>
+    </div>
+
+    <!-- Stamina Bar -->
+    <div id="stamina-container">
+        <div id="stamina-label">STAMINA</div>
+        <div id="stamina-bar">
+            <div id="stamina-fill"></div>
+        </div>
+    </div>
+
+
+    <!-- Startup Fade-in Overlay -->
+    <div id="startup-overlay" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: black;
+        z-index: 1000;
+        transition: opacity 2s ease-out;
+    "></div>
+
+    <!-- Notification -->
+    <div id="notification"></div>
+
+    <!-- In-Game Settings Panel -->
+    <div id="game-settings-overlay" style="
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.7); z-index: 300;
+        display: none; justify-content: center; align-items: center;
+    ">
+        <div id="game-settings-panel" style="
+            width: 450px; max-width: 90vw;
+            background: linear-gradient(135deg, rgba(20, 20, 20, 0.95) 0%, rgba(30, 30, 30, 0.95) 100%);
+            border: 1px solid rgba(150, 150, 150, 0.3);
+            padding: 35px; border-radius: 8px;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+        ">
+            <h2 style="
+                color: #d0d0d0; font-family: 'Courier New', monospace;
+                font-size: 24px; letter-spacing: 6px; text-align: center;
+                margin-bottom: 25px; text-shadow: 0 0 10px rgba(200, 200, 200, 0.3);
+            ">SETTINGS</h2>
+
+            <div style="margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label style="color: rgba(180, 180, 180, 0.7); font-size: 13px; letter-spacing: 2px; text-transform: uppercase;">Master Volume</label>
+                    <span id="game-masterVolValue" style="color: #e0e0e0; font-size: 13px;">80%</span>
+                </div>
+                <input type="range" id="masterVolumeSlider" min="0" max="100" value="80" style="width: 100%; height: 4px; -webkit-appearance: none; background: rgba(150, 150, 150, 0.2); outline: none; cursor: pointer;"
+                    oninput="updateMasterVolume(this.value)">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label style="color: rgba(180, 180, 180, 0.7); font-size: 13px; letter-spacing: 2px; text-transform: uppercase;">Mouse Sensitivity</label>
+                    <span id="game-sensValue" style="color: #e0e0e0; font-size: 13px;">50%</span>
+                </div>
+                <input type="range" id="mouseSensitivitySlider" min="1" max="100" value="50" style="width: 100%; height: 4px; -webkit-appearance: none; background: rgba(150, 150, 150, 0.2); outline: none; cursor: pointer;"
+                    oninput="updateMouseSensitivity(this.value)">
+            </div>
+
+
+            <button onclick="closeGameSettings()" style="
+                display: block; margin: 0 auto;
+                background: transparent; border: 1px solid rgba(150, 150, 150, 0.3);
+                color: #c0c0c0; font-family: 'Courier New', monospace;
+                font-size: 14px; letter-spacing: 3px; padding: 10px 35px;
+                cursor: pointer; transition: all 0.3s ease; text-transform: uppercase;
+            " onmouseover="this.style.borderColor='rgba(255,255,255,0.6)';this.style.color='#ffffff'"
+               onmouseout="this.style.borderColor='rgba(150,150,150,0.3)';this.style.color='#c0c0c0'">
+                BACK
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script>
+        // ========== GAME STATE ==========
+        const state = {
+            isLocked: false,
+            moveForward: false, moveBackward: false,
+            moveLeft: false, moveRight: false,
+            canJump: true,
+            isSprinting: false,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3()
+        };
+
+        // ========== SCREEN SHAKE SYSTEM ==========
+        const screenShake = {
+            intensity: 0,
+            duration: 0,
+            maxDuration: 0.15, // длительность тряски
+            maxIntensity: 0.008, // сила тряски
+            currentOffset: new THREE.Vector2(0, 0),
+            
+            trigger: function(intensity, duration) {
+                this.intensity = intensity || this.maxIntensity;
+                this.duration = duration || this.maxDuration;
+            },
+            
+            update: function(deltaTime) {
+                if (this.duration > 0) {
+                    this.duration -= deltaTime;
+                    const decay = this.duration / this.maxDuration;
+                    const shakeX = (Math.random() - 0.5) * 2 * this.intensity * decay;
+                    const shakeY = (Math.random() - 0.5) * 2 * this.intensity * decay;
+                    this.currentOffset.set(shakeX, shakeY);
+                } else {
+                    this.currentOffset.set(0, 0);
+                }
+            },
+            
+            getOffset: function() {
+                return this.currentOffset;
+            }
+        };
+
+        // ========== MUZZLE FLASH EFFECT ==========
+        const muzzleFlash = {
+            active: false,
+            intensity: 0,
+            duration: 0.05,
+            
+            trigger: function() {
+                this.active = true;
+                this.intensity = 1.0;
+                this.duration = 0.05;
+            },
+            
+            update: function(deltaTime) {
+                if (this.active) {
+                    this.duration -= deltaTime;
+                    this.intensity = this.duration / 0.05;
+                    if (this.duration <= 0) {
+                        this.active = false;
+                        this.intensity = 0;
+                    }
+                }
+            }
+        };
+
+        // ========== STAMINA SYSTEM ==========
+        const stamina = {
+            max: 100,
+            current: 100,
+            drainRate: 30,
+            recoverRate: 18,
+            minSprint: 10,
+            visible: false,
+            fadeTimeout: null,
+            wasVisible: false
+        };
+
+        // ========== SPRINT & MOVEMENT ENHANCEMENTS ==========
+        const movement = {
+            walkSpeed: 3.5,
+            sprintSpeed: 7.0,
+            sprintAcceleration: 8.0,
+            currentSpeed: 0,
+            headBobIntensity: 0.025,
+            headBobFrequency: 10,
+            weaponSwayIntensity: 1.5,
+            pistolFollowSpeed: 15.0,
+            pistolFollowSpeedNormal: 8.0
+        };
+
+        // ========== BULLET SPREAD SYSTEM ==========
+        const bulletSpread = {
+            baseSpread: 0.0,
+            walkingSpread: 0.02,
+            sprintSpread: 0.08,
+            jumpSpread: 0.06,
+            currentSpread: 0.0
+        };
+
+        // Оптимизированное обновление stamina UI - только при изменении значений
+        const staminaUIState = {
+            visible: false,
+            sprintVisible: false,
+            width: 100,
+            isLow: false
+        };
+
+        function updateStaminaUI() {
+            const container = document.getElementById('stamina-container');
+            const fill = document.getElementById('stamina-fill');
+            const label = document.getElementById('stamina-label');
+            const sprintIndicator = document.getElementById('sprint-indicator');
+            
+            const isActive = state.isSprinting && isMoving;
+            const isInAir = isJumping;
+            const shouldShow = isActive || isInAir;
+            
+            // Обновляем только если значение изменилось
+            if (shouldShow !== staminaUIState.visible) {
+                staminaUIState.visible = shouldShow;
+                if (shouldShow) {
+                    container.classList.add('visible');
+                } else {
+                    container.classList.remove('visible');
+                }
+            }
+
+            const sprintShouldShow = state.isSprinting && isActive;
+            if (sprintShouldShow !== staminaUIState.sprintVisible) {
+                staminaUIState.sprintVisible = sprintShouldShow;
+                if (sprintShouldShow) {
+                    sprintIndicator.classList.add('visible');
+                } else {
+                    sprintIndicator.classList.remove('visible');
+                }
+            }
+            
+            const percent = Math.round((stamina.current / stamina.max) * 100);
+            if (percent !== staminaUIState.width) {
+                staminaUIState.width = percent;
+                fill.style.width = percent + '%';
+            }
+            
+            const isLow = percent < 25;
+            if (isLow !== staminaUIState.isLow) {
+                staminaUIState.isLow = isLow;
+                if (isLow) {
+                    fill.classList.add('low');
+                    label.style.color = 'rgba(255, 100, 100, 0.9)';
+                } else {
+                    fill.classList.remove('low');
+                    label.style.color = 'rgba(255, 255, 255, 0.85)';
+                }
+            }
+        }
+
+        function showNotification(text) {
+            const notif = document.getElementById('notification');
+            notif.textContent = text;
+            notif.classList.add('show');
+            setTimeout(() => notif.classList.remove('show'), 1500);
+        }
+
+        // ========== THREE.JS SETUP ==========
+        const scene = new THREE.Scene();
+        // Туман - более тёмный и атмосферный, не "бетонная стена"
+        scene.fog = new THREE.FogExp2(0x2a2f35, 0.012);
+        
+        // Тёмный градиентный фон вместо яркого дневного неба
+        scene.background = new THREE.Color(0x1a1e22);
+        
+        // Днём луна и звёзды скрыты (не видны при дневном освещении)
+        // Луна - визуальный диск (скрыта днём)
+        const moonGeometry = new THREE.SphereGeometry(8, 16, 16);
+        const moonMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffee,
+            visible: false // Скрываем луну днём
+        });
+        const moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+        moonMesh.position.set(-50, 100, -50);
+        scene.add(moonMesh);
+        
+        // Свечение вокруг луны (скрыто днём)
+        const moonGlowGeometry = new THREE.SphereGeometry(12, 16, 16);
+        const moonGlowMaterial = new THREE.MeshBasicMaterial({
+            color: 0xaaccff,
+            transparent: true,
+            opacity: 0.15,
+            side: THREE.BackSide,
+            visible: false // Скрываем свечение днём
+        });
+        const moonGlow = new THREE.Mesh(moonGlowGeometry, moonGlowMaterial);
+        moonGlow.position.copy(moonMesh.position);
+        scene.add(moonGlow);
+        
+        // Звёзды скрыты днём
+        const starsGeometry = new THREE.BufferGeometry();
+        const starsCount = 2000;
+        const positions = new Float32Array(starsCount * 3);
+        const colors = new Float32Array(starsCount * 3);
+        
+        for (let i = 0; i < starsCount * 3; i += 3) {
+            const radius = 200 + Math.random() * 200;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            
+            positions[i] = radius * Math.sin(phi) * Math.cos(theta);
+            positions[i + 1] = radius * Math.cos(phi);
+            positions[i + 2] = radius * Math.sin(phi) * Math.sin(theta);
+            
+            const brightness = 0.5 + Math.random() * 0.5;
+            colors[i] = brightness;
+            colors[i + 1] = brightness;
+            colors[i + 2] = brightness + 0.1;
+        }
+        
+        starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        
+        const starsMaterial = new THREE.PointsMaterial({
+            size: 0.7,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            fog: true,
+            visible: false // Скрываем звёзды днём
+        });
+        
+        const stars = new THREE.Points(starsGeometry, starsMaterial);
+        scene.add(stars);
+
+        const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 300);
+        camera.position.set(0, 1.7, 15);
+
+        const viewmodel = new THREE.Object3D();
+        camera.add(viewmodel);
+        scene.add(camera);
+
+        // Gun variables
+        let gunModel = null;
+        let gunContainer = new THREE.Object3D();
+        viewmodel.add(gunContainer);
+        let isReloading = false;
+        let isGunHolstered = false;
+        
+        // ========== EASING FUNCTIONS ==========
+        const easing = {
+            easeInOutCubic: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+            easeOutBack: t => {
+                const c1 = 1.70158;
+                const c3 = c1 + 1;
+                return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+            },
+            easeOutElastic: t => {
+                const c4 = (2 * Math.PI) / 3;
+                return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+            },
+            easeOutBounce: t => {
+                const n1 = 7.5625;
+                const d1 = 2.75;
+                if (t < 1 / d1) return n1 * t * t;
+                if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+                if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+                return n1 * (t -= 2.625 / d1) * t + 0.984375;
+            }
+        };
+
+        // ========== WEAPON ANIMATION SYSTEM ==========
+        const weaponAnimation = {
+            // Holster animation state
+            holsterProgress: 0,
+            holsterDuration: 0.5,
+            holsterPhase: 'idle', // 'idle', 'drawing', 'holstering'
+            
+            // Reload animation state - быстрая перезарядка в боковом положении
+            reloadProgress: 0,
+            reloadDuration: 2.0,
+            reloadPhase: 'idle', // 'idle', 'reloading'
+            
+            // Target positions
+            basePosition: new THREE.Vector3(0.25, -0.3, -0.4),
+            baseRotation: new THREE.Euler(Math.PI / 2, -Math.PI / 30, Math.PI / 15),
+            holsteredPosition: new THREE.Vector3(0.35, -0.5, -0.3),
+            holsteredRotation: new THREE.Euler(Math.PI / 2 + 0.2, -Math.PI / 20, Math.PI / 12),
+            
+            // Позиции для плавной перезарядки в боковом положении
+            reloadCheckPosition: new THREE.Vector3(0.35, -0.35, -0.35),
+            reloadCheckRotation: new THREE.Euler(Math.PI / 2 + 0.3, -Math.PI / 6, Math.PI / 6),
+            reloadMagPosition: new THREE.Vector3(0.4, -0.4, -0.25),
+            reloadMagRotation: new THREE.Euler(Math.PI / 2 + 0.2, -Math.PI / 5, Math.PI / 5),
+            
+            update: function(deltaTime) {
+                // Holster animation - плавная как доставание
+                if (this.holsterPhase === 'drawing') {
+                    this.holsterProgress += deltaTime / this.holsterDuration;
+                    if (this.holsterProgress >= 1) {
+                        this.holsterProgress = 1;
+                        this.holsterPhase = 'idle';
+                    }
+                } else if (this.holsterPhase === 'holstering') {
+                    this.holsterProgress -= deltaTime / this.holsterDuration;
+                    if (this.holsterProgress <= 0) {
+                        this.holsterProgress = 0;
+                        this.holsterPhase = 'idle';
+                    }
+                }
+                
+                // Reload animation - плавная перезарядка
+                if (this.reloadPhase === 'reloading') {
+                    this.reloadProgress += deltaTime / this.reloadDuration;
+                    if (this.reloadProgress >= 1) {
+                        this.reloadProgress = 1;
+                        this.reloadPhase = 'idle';
+                    }
+                }
+                
+                this.applyTransforms();
+            },
+            
+            applyTransforms: function() {
+                // Если ADS активен и нет активной анимации перезарядки - не трогаем позицию (ADS управляет)
+                if (ads.isAiming && this.reloadPhase !== 'reloading') {
+                    return; // ADS управляет позицией пистолета
+                }
+                
+                // Если нет активной анимации - не трогаем позицию (weaponSway управляет)
+                if (this.reloadPhase !== 'reloading' && this.holsterPhase === 'idle' && !isGunHolstered) {
+                    return; // Выходим, пусть weaponSway управляет пистолетом
+                }
+                
+                let targetPos = this.basePosition.clone();
+                let targetRot = this.baseRotation.clone();
+                
+                // Apply holster animation - плавная как доставание (зеркально)
+                if (this.holsterPhase !== 'idle' || isGunHolstered) {
+                    const holsterT = isGunHolstered ? 1 : easing.easeInOutCubic(this.holsterProgress);
+                    const holsteredT = isGunHolstered ? 1 : holsterT;
+                    
+                    targetPos.lerp(this.holsteredPosition, holsteredT);
+                    
+                    // Smooth rotation interpolation
+                    const qx = new THREE.Quaternion();
+                    const qy = new THREE.Quaternion();
+                    qx.setFromEuler(this.baseRotation);
+                    qy.setFromEuler(this.holsteredRotation);
+                    qx.slerp(qy, holsteredT);
+                    targetRot.setFromQuaternion(qx);
+                }
+                
+                // Apply reload animation - ПЛАВНАЯ как у гангстеров
+                if (this.reloadPhase === 'reloading') {
+                    const reloadT = this.reloadProgress;
+                    
+                    // Фаза 1: Опускаем пистолет и проверяем магазин (0-0.3)
+                    if (reloadT < 0.3) {
+                        const t = reloadT / 0.3;
+                        const easedT = easing.easeInOutCubic(t);
+                        targetPos.lerp(this.reloadCheckPosition, easedT);
+                        
+                        const q1 = new THREE.Quaternion();
+                        const q2 = new THREE.Quaternion();
+                        q1.setFromEuler(this.baseRotation);
+                        q2.setFromEuler(this.reloadCheckRotation);
+                        q1.slerp(q2, easedT);
+                        targetRot.setFromQuaternion(q1);
+                    }
+                    // Фаза 2: Вынимаем магазин (0.3-0.5)
+                    else if (reloadT < 0.5) {
+                        const t = (reloadT - 0.3) / 0.2;
+                        const easedT = easing.easeInOutCubic(t);
+                        targetPos.lerp(this.reloadMagPosition, easedT * 0.3);
+                        
+                        const q1 = new THREE.Quaternion();
+                        const q2 = new THREE.Quaternion();
+                        q1.setFromEuler(this.reloadCheckRotation);
+                        q2.setFromEuler(this.reloadMagRotation);
+                        q1.slerp(q2, easedT * 0.5);
+                        targetRot.setFromQuaternion(q1);
+                    }
+                    // Фаза 3: Вставляем новый магазин (0.5-0.7)
+                    else if (reloadT < 0.7) {
+                        const t = (reloadT - 0.5) / 0.2;
+                        const easedT = easing.easeInOutCubic(t);
+                        targetPos.lerp(this.reloadCheckPosition, easedT);
+                        
+                        const q1 = new THREE.Quaternion();
+                        const q2 = new THREE.Quaternion();
+                        q1.setFromEuler(this.reloadMagRotation);
+                        q2.setFromEuler(this.reloadCheckRotation);
+                        q1.slerp(q2, easedT);
+                        targetRot.setFromQuaternion(q1);
+                    }
+                    // Фаза 4: Возвращаем в исходное положение (0.7-1.0)
+                    else {
+                        const t = (reloadT - 0.7) / 0.3;
+                        const easedT = easing.easeInOutCubic(t);
+                        targetPos.lerp(this.basePosition, easedT);
+                        
+                        const q1 = new THREE.Quaternion();
+                        const q2 = new THREE.Quaternion();
+                        q1.setFromEuler(this.reloadCheckRotation);
+                        q2.setFromEuler(this.baseRotation);
+                        q1.slerp(q2, easedT);
+                        targetRot.setFromQuaternion(q1);
+                    }
+                }
+                
+                // Apply to gun container - плавное движение
+                gunContainer.position.lerp(targetPos, 0.2);
+                
+                const currentQ = new THREE.Quaternion().setFromEuler(gunContainer.rotation);
+                const targetQ = new THREE.Quaternion().setFromEuler(targetRot);
+                currentQ.slerp(targetQ, 0.2);
+                gunContainer.rotation.setFromQuaternion(currentQ);
+            },
+            
+            draw: function() {
+                if (this.holsterPhase === 'idle' && !isGunHolstered) {
+                    this.holsterPhase = 'drawing';
+                    this.holsterProgress = 0;
+                }
+            },
+            
+            holster: function() {
+                if (this.holsterPhase === 'idle' && !isGunHolstered) {
+                    this.holsterPhase = 'holstering';
+                    this.holsterProgress = 1;
+                }
+            },
+            
+            startReload: function() {
+                if (this.reloadPhase === 'idle') {
+                    this.reloadPhase = 'reloading';
+                    this.reloadProgress = 0;
+                }
+            },
+            
+            endReload: function() {
+                this.reloadPhase = 'idle';
+                this.reloadProgress = 1;
+                // Сбрасываем позицию gunContainer в базовую, чтобы не застревал
+                gunContainer.position.copy(this.basePosition);
+                gunContainer.rotation.copy(this.baseRotation);
+            }
+        };
+
+        // ========== AIM DOWN SIGHTS (ADS) SYSTEM ==========
+        const ads = {
+            isAiming: false,
+            
+            // Базовая позиция (от бедра) — берётся из viewmodel при загрузке
+            basePosition: new THREE.Vector3(0.25, -0.3, -0.4),
+            baseRotation: new THREE.Euler(Math.PI / 2, -Math.PI / 30, Math.PI / 15),
+            
+            // Целевые параметры для viewmodel при ADS (те же координаты, что и базовая позиция)
+            // Пистолет остаётся в том же положении, просто viewmodel перемещается в центр
+            targetPosition: new THREE.Vector3(0.25, -0.3, -0.4),
+            targetRotation: new THREE.Euler(Math.PI / 2, -Math.PI / 30, Math.PI / 15),
+            
+            lerpSpeed: 12.0,
+            crosshairElement: null,
+            initialized: true,
+            
+            init: function() {
+                this.crosshairElement = document.getElementById('crosshair');
+                this.initialized = true;
+            },
+            
+            setBasePosition: function(pos, rot) {
+                this.basePosition.copy(pos);
+                this.baseRotation.copy(rot);
+                this.targetPosition.copy(pos);
+                this.targetRotation.copy(rot);
+            },
+            
+            enterAim: function() {
+                if (!state.isSprinting && !isReloading && !isGunHolstered && gunModel) {
+                    this.isAiming = true;
+                    if (this.crosshairElement) {
+                        this.crosshairElement.style.display = 'none';
+                    }
+                }
+            },
+            
+            exitAim: function() {
+                this.isAiming = false;
+                if (this.crosshairElement) {
+                    this.crosshairElement.style.display = 'block';
+                }
+            },
+            
+            forceExit: function() {
+                this.isAiming = false;
+                if (this.crosshairElement) {
+                    this.crosshairElement.style.display = 'block';
+                }
+            },
+            
+            update: function(deltaTime) {
+                if (!this.initialized) return;
+                
+                const targetPos = this.isAiming ? this.targetPosition : this.basePosition;
+                const targetRot = this.isAiming ? this.targetRotation : this.baseRotation;
+                
+                // Плавная интерполяция позиции viewmodel
+                viewmodel.position.lerp(targetPos, this.lerpSpeed * deltaTime);
+                
+                // Плавная интерполяция поворота viewmodel
+                const currentQ = new THREE.Quaternion().setFromEuler(viewmodel.rotation);
+                const targetQ = new THREE.Quaternion().setFromEuler(targetRot);
+                currentQ.slerp(targetQ, this.lerpSpeed * deltaTime);
+                viewmodel.rotation.setFromQuaternion(currentQ);
+            },
+            
+            isAimingDownSights: function() {
+                return this.isAiming;
+            }
+        };
+
+        // ========== ENHANCED WEAPON SWAY & ANIMATION SYSTEM ==========
+        const weaponSway = {
+            // Base parameters
+            maxYawOffset: 4.0,
+            maxPitchOffset: 3.0,
+            positionOffsetScale: 0.04,
+            followSpeed: 8.0,
+            followSmoothing: 0.12,
+            
+            // Jump animation
+            jumpKickOffsetY: -0.06,
+            jumpKickPitch: 0.08,
+            jumpKickRoll: 0.05,
+            jumpReturnSpeed: 5.0,
+            
+            // Recoil animation - enhanced for realism
+            recoilKickBack: 0.08,
+            recoilPitchUp: 0.12,
+            recoilRollRight: 0.06,
+            recoilReturnSpeed: 12.0,
+            recoilSmoothing: 0.15,
+            
+            // Current state
+            currentYawOffset: 0,
+            currentPitchOffset: 0,
+            currentJumpY: 0,
+            currentJumpPitch: 0,
+            currentJumpRoll: 0,
+            currentRecoilZ: 0,
+            currentRecoilPitch: 0,
+            currentRecoilRoll: 0,
+            previousYaw: 0,
+            previousPitch: 0,
+            wasJumping: false,
+            jumpTriggered: false,
+            basePosition: new THREE.Vector3(0, 0, 0),
+            baseRotation: new THREE.Euler(0, 0, 0),
+            
+            // Walking/Running bob animation
+            walkBobPhase: 0,
+            runBobPhase: 0,
+            walkBobIntensity: 0.015,
+            runBobIntensity: 0.035,
+            walkBobFrequency: 8,
+            runBobFrequency: 12,
+            currentBobY: 0,
+            currentBobX: 0,
+            currentBobRotate: 0,
+            
+            // Stamina-based sway/shake
+            staminaShakeIntensity: 0,
+            staminaShakePhase: 0,
+            
+            // Smooth sway offsets
+            swayOffset: new THREE.Vector3(0, 0, 0),
+            swayRotOffset: new THREE.Euler(0, 0, 0),
+            
+            // Target values for smooth interpolation
+            targetMaxYaw: 4.0,
+            targetMaxPitch: 3.0,
+            targetFollowSpeed: 8.0,
+            targetPositionScale: 0.04,
+            
+            // Sprint-specific animation
+            sprintSwayIntensity: 0,
+            sprintSwayPhase: 0,
+
+            init: function(yaw, pitch) {
+                this.previousYaw = yaw;
+                this.previousPitch = pitch;
+            },
+
+            applyRecoil: function() {
+                this.currentRecoilZ = this.recoilKickBack;
+                this.currentRecoilPitch = this.recoilPitchUp;
+                this.currentRecoilRoll = this.recoilRollRight;
+            },
+
+            // Smoothly interpolate to target parameters
+            updateTargetParams: function(deltaTime) {
+                const lerpFactor = 1 - Math.exp(-5 * deltaTime);
+                this.maxYawOffset += (this.targetMaxYaw - this.maxYawOffset) * lerpFactor;
+                this.maxPitchOffset += (this.targetMaxPitch - this.maxPitchOffset) * lerpFactor;
+                this.followSpeed += (this.targetFollowSpeed - this.followSpeed) * lerpFactor;
+                this.positionOffsetScale += (this.targetPositionScale - this.positionOffsetScale) * lerpFactor;
+            },
+
+            // Set parameters for different states
+            setWalkingParams: function() {
+                this.targetMaxYaw = 4.0;
+                this.targetMaxPitch = 3.0;
+                this.targetFollowSpeed = movement.pistolFollowSpeedNormal;
+                this.targetPositionScale = 0.04;
+            },
+            
+            setRunningParams: function() {
+                this.targetMaxYaw = 7.0;
+                this.targetMaxPitch = 5.0;
+                this.targetFollowSpeed = movement.pistolFollowSpeed;
+                this.targetPositionScale = 0.07;
+            },
+            
+            setAimingParams: function() {
+                this.targetMaxYaw = 1.0;
+                this.targetMaxPitch = 0.8;
+                this.targetFollowSpeed = 18.0;
+                this.targetPositionScale = 0.015;
+            },
+
+            update: function(deltaTime, cameraYaw, cameraPitch, isJumping, isSprinting, currentStamina) {
+                // Update target parameters smoothly
+                this.updateTargetParams(deltaTime);
+                
+                // Calculate head bob from movement
+                if (isMoving && !isJumping) {
+                    const bobMultiplier = isSprinting ? 1.8 : 1.0;
+                    const bobFreq = isSprinting ? this.runBobFrequency : this.walkBobFrequency;
+                    const bobIntensity = isSprinting ? this.runBobIntensity : this.walkBobIntensity;
+                    
+                    this.walkBobPhase += deltaTime * bobFreq * bobMultiplier;
+                    
+                    // Vertical bob (sin wave)
+                    this.currentBobY = Math.sin(this.walkBobPhase) * bobIntensity;
+                    
+                    // Horizontal bob (cos wave, half frequency for natural feel)
+                    this.currentBobX = Math.cos(this.walkBobPhase * 0.5) * bobIntensity * 0.5;
+                    
+                    // Rotational bob (slight tilt)
+                    this.currentBobRotate = Math.sin(this.walkBobPhase * 0.7) * bobIntensity * 0.3;
+                } else {
+                    // Smoothly return to zero
+                    const bobDecay = Math.exp(-8 * deltaTime);
+                    this.currentBobY *= bobDecay;
+                    this.currentBobX *= bobDecay;
+                    this.currentBobRotate *= bobDecay;
+                }
+                
+                // Calculate stamina-based shake
+                if (isSprinting && isMoving && currentStamina < 30) {
+                    const shakeAmount = (30 - currentStamina) / 30; // 0 to 1
+                    this.staminaShakePhase += deltaTime * 15;
+                    this.staminaShakeIntensity = shakeAmount * 0.02;
+                } else {
+                    this.staminaShakeIntensity *= Math.exp(-5 * deltaTime);
+                }
+                
+                // Calculate sprint-specific sway
+                if (isSprinting && isMoving) {
+                    this.sprintSwayPhase += deltaTime * 10;
+                    this.sprintSwayIntensity = Math.sin(this.sprintSwayPhase) * 0.015;
+                } else {
+                    this.sprintSwayIntensity *= Math.exp(-5 * deltaTime);
+                }
+
+                // Mouse movement inertia
+                let deltaYaw = cameraYaw - this.previousYaw;
+                let deltaPitch = cameraPitch - this.previousPitch;
+                this.previousYaw = cameraYaw;
+                this.previousPitch = cameraPitch;
+
+                while (deltaYaw > Math.PI) deltaYaw -= Math.PI * 2;
+                while (deltaYaw < -Math.PI) deltaYaw += Math.PI * 2;
+
+                const inertiaStrength = isSprinting ? 0.5 : 0.4;
+                this.currentYawOffset += deltaYaw * inertiaStrength;
+                this.currentPitchOffset += deltaPitch * inertiaStrength;
+
+                const maxYawRad = THREE.MathUtils.degToRad(this.maxYawOffset);
+                const maxPitchRad = THREE.MathUtils.degToRad(this.maxPitchOffset);
+                this.currentYawOffset = THREE.MathUtils.clamp(this.currentYawOffset, -maxYawRad, maxYawRad);
+                this.currentPitchOffset = THREE.MathUtils.clamp(this.currentPitchOffset, -maxPitchRad, maxPitchRad);
+
+                const decayFactor = Math.exp(-this.followSpeed * deltaTime);
+                this.currentYawOffset *= decayFactor;
+                this.currentPitchOffset *= decayFactor;
+
+                // Jump animation
+                this.jumpTriggered = isJumping && !this.wasJumping;
+                this.wasJumping = isJumping;
+
+                if (this.jumpTriggered) {
+                    this.currentJumpY = this.jumpKickOffsetY;
+                    this.currentJumpPitch = this.jumpKickPitch;
+                    this.currentJumpRoll = this.jumpKickRoll;
+                }
+
+                if (!this.jumpTriggered) {
+                    const jumpDecay = Math.exp(-this.jumpReturnSpeed * deltaTime);
+                    this.currentJumpY *= jumpDecay;
+                    this.currentJumpPitch *= jumpDecay;
+                    this.currentJumpRoll *= jumpDecay;
+                }
+
+                // Recoil animation
+                const recoilDecay = Math.exp(-this.recoilReturnSpeed * deltaTime);
+                this.currentRecoilZ *= recoilDecay;
+                this.currentRecoilPitch *= recoilDecay;
+                this.currentRecoilRoll *= recoilDecay;
+
+                // Calculate stamina shake offset
+                const staminaShakeX = Math.sin(this.staminaShakePhase) * this.staminaShakeIntensity;
+                const staminaShakeY = Math.cos(this.staminaShakePhase * 1.3) * this.staminaShakeIntensity;
+                
+                // Calculate sprint sway offset
+                const sprintSwayX = this.sprintSwayIntensity;
+
+                // Вычисляем основные смещения от sway
+                const posOffsetX = -this.currentYawOffset * this.positionOffsetScale * 10 + this.currentBobX + staminaShakeX + sprintSwayX;
+                const posOffsetY = this.currentPitchOffset * this.positionOffsetScale * 5 + this.currentBobY + staminaShakeY;
+
+                this.swayOffset.set(
+                    posOffsetX,
+                    posOffsetY + this.currentJumpY,
+                    -this.currentRecoilZ
+                );
+
+                this.swayRotOffset.set(
+                    this.currentPitchOffset + this.currentJumpPitch + this.currentRecoilPitch + this.currentBobRotate,
+                    this.currentYawOffset,
+                    this.currentJumpRoll + this.currentRecoilRoll
+                );
+
+                // Применяем смещения к оружию
+                if (weaponAnimation.reloadPhase === 'idle' && weaponAnimation.holsterPhase === 'idle' && !isGunHolstered) {
+                    if (!ads.isAiming) {
+                        const basePos = weaponAnimation.basePosition;
+                        const baseRot = weaponAnimation.baseRotation;
+                        
+                        const targetPos = new THREE.Vector3(
+                            basePos.x + this.swayOffset.x,
+                            basePos.y + this.swayOffset.y,
+                            basePos.z + this.swayOffset.z
+                        );
+                        
+                        const targetRot = new THREE.Euler(
+                            baseRot.x + this.swayRotOffset.x,
+                            baseRot.y + this.swayRotOffset.y,
+                            baseRot.z + this.swayRotOffset.z
+                        );
+                        
+                        const t = 1 - Math.exp(-this.followSpeed * deltaTime);
+                        gunContainer.position.lerp(targetPos, t);
+                        
+                        gunContainer.rotation.x += (targetRot.x - gunContainer.rotation.x) * t;
+                        gunContainer.rotation.y += (targetRot.y - gunContainer.rotation.y) * t;
+                        gunContainer.rotation.z += (targetRot.z - gunContainer.rotation.z) * t;
+                    }
+                }
+            }
+        };
+
+        let currentAmmo = 7;
+        const maxAmmo = 7;
+        let canShoot = true;
+        const shootCooldown = 140; // 100
+
+        // ========== ДРОБОВИК (SHOTGUN) ==========
+        let shotgunAmmo = 6;
+        const shotgunMaxAmmo = 6;
+        let canShootShotgun = true;
+        const shotgunCooldown = 800;
+        let isShotgunActive = false;
+        let isShotgunReloading = false;
+        
+        const shotgunSound = new Audio('звуки/loud-pistol-shot.mp3');
+        shotgunSound.volume = 0.6;
+        
+        const shotgunReloadSound = new Audio('звуки/15545_48428-lq.mp3');
+        shotgunReloadSound.volume = 0.6;
+        
+        let shotgunModel = null;
+        let shotgunContainer = new THREE.Object3D();
+        viewmodel.add(shotgunContainer);
+        
+        const shotgunPellets = [];
+        const pelletGeometry = new THREE.SphereGeometry(0.015, 4, 4);
+        const pelletMaterial = new THREE.MeshBasicMaterial({ color: 0xff8800 });
+        
+        function shootShotgun() {
+            if (!canShootShotgun || isShotgunReloading || shotgunAmmo <= 0 || !isShotgunActive) return;
+            
+            canShootShotgun = false;
+            shotgunAmmo--;
+            updateShotgunAmmoDisplay();
+            
+            shotgunSound.currentTime = 0;
+            shotgunSound.play().catch(e => console.log('Shotgun sound failed:', e));
+            
+            const pelletCount = 8;
+            const spreadAngle = 0.08;
+            
+            for (let i = 0; i < pelletCount; i++) {
+                const pellet = new THREE.Mesh(pelletGeometry, pelletMaterial);
+                const startPos = new THREE.Vector3();
+                camera.getWorldPosition(startPos);
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                
+                direction.x += (Math.random() - 0.5) * spreadAngle;
+                direction.y += (Math.random() - 0.5) * spreadAngle;
+                direction.z += (Math.random() - 0.5) * spreadAngle * 0.5;
+                direction.normalize();
+                
+                pellet.position.copy(startPos).add(direction.multiplyScalar(0.5));
+                pellet.userData.velocity = direction.clone().multiplyScalar(bulletSpeed * 0.9);
+                pellet.userData.life = 1.5;
+                pellet.userData.isShotgunPellet = true;
+                
+                scene.add(pellet);
+                shotgunPellets.push(pellet);
+            }
+            
+            const flashIntensity = state.isSprinting ? 5 : 3;
+            const flash = new THREE.PointLight(0xff6600, flashIntensity, 8);
+            const flashPos = new THREE.Vector3();
+            shotgunContainer.getWorldPosition(flashPos);
+            flash.position.copy(flashPos);
+            scene.add(flash);
+            setTimeout(() => scene.remove(flash), 80);
+            
+            weaponSway.applyRecoil();
+            weaponSway.currentRecoilZ += 0.12;
+            weaponSway.currentRecoilPitch += 0.15;
+            weaponSway.currentRecoilRoll += (Math.random() - 0.5) * 0.1;
+            
+            screenShake.trigger(0.02, 0.2);
+            muzzleFlash.trigger();
+            
+            setTimeout(() => { canShootShotgun = true; }, shotgunCooldown);
+        }
+        
+        function reloadShotgun() {
+            if (isShotgunReloading || shotgunAmmo === shotgunMaxAmmo || !isShotgunActive) return;
+            
+            isShotgunReloading = true;
+            showNotification('SHOTGUN RELOADING...');
+            
+            shotgunReloadSound.currentTime = 0;
+            shotgunReloadSound.play().catch(e => console.log('Shotgun reload sound failed:', e));
+            
+            setTimeout(() => {
+                shotgunAmmo = shotgunMaxAmmo;
+                isShotgunReloading = false;
+                updateShotgunAmmoDisplay();
+                showNotification('SHOTGUN RELOADED');
+            }, 2500);
+        }
+        
+        function updateShotgunAmmoDisplay() {
+            const ammoEl = document.getElementById('ammo-display');
+            if (ammoEl && isShotgunActive) {
+                ammoEl.textContent = shotgunAmmo + ' / ' + shotgunMaxAmmo;
+            }
+        }
+        
+        function toggleWeapon() {
+            isShotgunActive = !isShotgunActive;
+            
+            if (isShotgunActive) {
+                if (gunModel) gunModel.visible = false;
+                if (shotgunModel) shotgunModel.visible = true;
+                document.getElementById('weapon-indicator').textContent = 'SHOTGUN';
+                updateShotgunAmmoDisplay();
+                showNotification('SHOTGUN EQUIPPED');
+            } else {
+                if (gunModel) gunModel.visible = true;
+                if (shotgunModel) shotgunModel.visible = false;
+                document.getElementById('weapon-indicator').textContent = 'PISTOL';
+                updateAmmoDisplay();
+                showNotification('PISTOL EQUIPPED');
+            }
+            
+            console.log('Weapon:', isShotgunActive ? 'SHOTGUN' : 'PISTOL');
+        }
+        // ========== КОНЕЦ КОДА ДРОБОВИКА ==========
+
+        // Bullets
+        const bullets = [];
+        const bulletSpeed = 50;
+        const bulletGeometry = new THREE.SphereGeometry(0.02, 4, 4);
+        const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+
+        // Sound
+        const pistolSound = new Audio('звуки/loud-pistol-shot.mp3');
+        pistolSound.volume = 0.4;
+        
+        // Звук перезарядки
+        const reloadSound = new Audio('звуки/15545_48428-lq.mp3');
+        reloadSound.volume = 0.5;
+
+        // ========== ФОНОВЫЙ ЗВУК НОЧИ ==========
+        const nightAmbience = new Audio('звуки/sounds-of-night-village-atmosphere-night-crickets.mp3');
+        nightAmbience.volume = 0.6; // 60% громкость
+        nightAmbience.loop = true; // Автоматический перезапуск после окончания
+
+        // ========== ЗВУК ТЯЖЁЛЫХ ВЗДОХОВ (усталость) ==========
+        const fatigueSound = new Audio('звуки/zlost--tyajlyie-vyidohi.mp3');
+        fatigueSound.volume = 0.5;
+        fatigueSound.loop = true;
+        let fatigueSoundPlaying = false;
+        
+        // Пытаемся запустить фоновый звук при первом взаимодействии
+        document.addEventListener('click', () => {
+            nightAmbience.play().catch(e => console.log('Night ambience autoplay blocked:', e));
+        }, { once: true });
+        
+        document.addEventListener('keydown', () => {
+            nightAmbience.play().catch(e => console.log('Night ambience autoplay blocked:', e));
+        }, { once: true });
+        
+        // Запускаем фоновый звук когда игра начинается
+        setTimeout(() => {
+            nightAmbience.play().catch(e => console.log('Night ambience autoplay blocked:', e));
+        }, 1000);
+
+        // ========== НАСТРОЙКИ ==========
+        let masterVolume = 0.8; // 80% по умолчанию
+        let mouseSensitivityValue = 0.5; // 50% по умолчанию
+        let isPaused = false;
+
+        // Загрузка настроек из localStorage
+        function loadSettings() {
+            const savedMasterVol = localStorage.getItem('masterVolume');
+            const savedSensitivity = localStorage.getItem('mouseSensitivity');
+            
+            if (savedMasterVol !== null) {
+                masterVolume = parseFloat(savedMasterVol);
+                document.getElementById('masterVolumeSlider').value = masterVolume * 100;
+                document.getElementById('game-masterVolValue').textContent = Math.round(masterVolume * 100) + '%';
+            }
+            
+            if (savedSensitivity !== null) {
+                mouseSensitivityValue = parseFloat(savedSensitivity);
+                document.getElementById('mouseSensitivitySlider').value = mouseSensitivityValue * 100;
+                document.getElementById('game-sensValue').textContent = Math.round(mouseSensitivityValue * 100) + '%';
+            }
+            
+            // Применяем чувствительность мыши
+            updateMouseSensitivityInternal();
+        }
+
+        // Сохранение настроек в localStorage
+        function saveSettings() {
+            localStorage.setItem('masterVolume', masterVolume);
+            localStorage.setItem('mouseSensitivity', mouseSensitivityValue);
+        }
+
+        // Обновление громкости
+        function updateMasterVolume(value) {
+            masterVolume = value / 100;
+            document.getElementById('game-masterVolValue').textContent = value + '%';
+            
+            // Применяем громкость ко всем звукам
+            pistolSound.volume = 0.4 * masterVolume;
+            reloadSound.volume = 0.5 * masterVolume;
+            nightAmbience.volume = 0.6 * masterVolume;
+            
+            saveSettings();
+        }
+
+        // Обновление чувствительности мыши (внутренняя функция)
+        function updateMouseSensitivityInternal() {
+            // Базовая чувствительность * значение настройки
+            const baseSensitivity = 0.002;
+            const adjustedSensitivity = baseSensitivity * (mouseSensitivityValue * 2); // 0.01 - 0.002 range
+            // Обновляем глобальную чувствительность (нужно модифицировать mouseSensitivity)
+        }
+
+        // Обновление чувствительности мыши
+        function updateMouseSensitivity(value) {
+            mouseSensitivityValue = value / 100;
+            document.getElementById('game-sensValue').textContent = value + '%';
+            saveSettings();
+        }
+
+        // ========== ЗВУК НАВЕДЕНИЯ МЫШИ ==========
+        const hoverSound = new Audio('звуки/beta11_main-menu_звуки_2181b19773767a7.mp3');
+        hoverSound.volume = 0.15; // Тихий звук для наведения
+
+        function playHoverSound() {
+            hoverSound.currentTime = 0;
+            hoverSound.play().catch(e => console.log('Hover sound failed:', e));
+        }
+
+        // Добавляем звук наведения на все интерактивные элементы в настройках
+        document.querySelectorAll('#game-settings-panel input[type="range"], #game-settings-panel button').forEach(el => {
+            el.addEventListener('mouseenter', playHoverSound);
+        });
+
+        // Загружаем настройки при старте
+        loadSettings();
+
+        // Shoot function
+        function shoot() {
+            if (!canShoot || isReloading || currentAmmo <= 0) return;
+
+            canShoot = false;
+            currentAmmo--;
+            updateAmmoDisplay();
+
+            pistolSound.currentTime = 0;
+            pistolSound.play().catch(e => console.log('Sound failed:', e));
+
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            const startPos = new THREE.Vector3();
+            camera.getWorldPosition(startPos);
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+
+            // Calculate bullet spread based on state
+            if (ads.isAiming) {
+                // Minimal spread when aiming down sights
+                direction.x += (Math.random() - 0.5) * 0.005;
+                direction.y += (Math.random() - 0.5) * 0.005;
+            } else if (state.isSprinting) {
+                direction.x += (Math.random() - 0.5) * bulletSpread.sprintSpread * 2;
+                direction.y += (Math.random() - 0.5) * bulletSpread.sprintSpread * 2;
+                direction.z += (Math.random() - 0.5) * bulletSpread.sprintSpread * 2;
+            } else if (isJumping) {
+                direction.x += (Math.random() - 0.5) * bulletSpread.jumpSpread * 2;
+                direction.y += (Math.random() - 0.5) * bulletSpread.jumpSpread * 2;
+            } else if (isMoving) {
+                direction.x += (Math.random() - 0.5) * bulletSpread.walkingSpread;
+                direction.y += (Math.random() - 0.5) * bulletSpread.walkingSpread;
+            }
+            direction.normalize();
+
+            bullet.position.copy(startPos).add(direction.multiplyScalar(0.5));
+            bullet.userData.velocity = direction.clone().multiplyScalar(bulletSpeed);
+            bullet.userData.life = 2;
+            bullet.userData.hasSpread = state.isSprinting || isJumping || isMoving;
+
+            scene.add(bullet);
+            bullets.push(bullet);
+
+            const flashIntensity = state.isSprinting ? 3 : 2;
+            const flash = new THREE.PointLight(0xffaa00, flashIntensity, 5);
+            const flashPos = new THREE.Vector3();
+            gunContainer.getWorldPosition(flashPos);
+            flash.position.copy(flashPos);
+            scene.add(flash);
+            setTimeout(() => scene.remove(flash), 50);
+
+            // Применяем отдачу оружия (поднятие вверх)
+            if (state.isSprinting) {
+                weaponSway.applyRecoil();
+                weaponSway.currentRecoilZ += 0.04;
+                weaponSway.currentRecoilPitch += 0.06;
+                weaponSway.currentRecoilRoll += (Math.random() - 0.5) * 0.08;
+            } else {
+                weaponSway.applyRecoil();
+            }
+
+            // Тряска экрана при выстреле
+            screenShake.trigger(0.012, 0.12);
+
+            // Эффект вспышки выстрела (muzzle flash)
+            muzzleFlash.trigger();
+
+            setTimeout(() => { canShoot = true; }, shootCooldown);
+        }
+
+        function reload() {
+            if (isReloading || currentAmmo === maxAmmo) return;
+            isReloading = true;
+            showNotification('RELOADING...');
+            
+            // Воспроизводим звук перезарядки
+            reloadSound.currentTime = 0;
+            reloadSound.play().catch(e => console.log('Reload sound failed:', e));
+            
+            // Запускаем анимацию перезарядки
+            weaponAnimation.startReload();
+
+            setTimeout(() => {
+                currentAmmo = maxAmmo;
+                isReloading = false;
+                updateAmmoDisplay();
+                showNotification('RELOADED');
+                
+                // Завершаем анимацию перезарядки (синхронно с reloadDuration = 2.0 сек)
+                weaponAnimation.endReload();
+            }, 2000);
+        }
+
+        function updateAmmoDisplay() {
+            const ammoEl = document.getElementById('ammo-display');
+            if (ammoEl) {
+                ammoEl.textContent = currentAmmo + ' / ' + maxAmmo;
+            }
+        }
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Обработчики потери/восстановления контекста WebGL
+        renderer.domElement.addEventListener('webglcontextlost', (event) => {
+            event.preventDefault();
+            console.warn('WebGL context lost. Pausing render loop.');
+        });
+
+        renderer.domElement.addEventListener('webglcontextrestored', () => {
+            console.log('WebGL context restored. Resuming.');
+            animate();
+        });
+
+        // Collision system
+        const collidableObjects = [];
+        const collisionRaycaster = new THREE.Raycaster();
+        const collisionDownRay = new THREE.Raycaster();
+        const collisionHorizontalRays = [];
+
+        for (let i = 0; i < 8; i++) {
+            collisionHorizontalRays.push(new THREE.Raycaster());
+        }
+
+        function checkCollision(position, movementVector) {
+            const playerHeight = 1.7;
+            const collisionDistance = 0.5;
+            const groundThreshold = 0.15; // Порог для определения земли
+
+            const directions = [
+                new THREE.Vector3(1, 0, 0),
+                new THREE.Vector3(-1, 0, 0),
+                new THREE.Vector3(0, 0, 1),
+                new THREE.Vector3(0, 0, -1),
+                new THREE.Vector3(0.707, 0, 0.707),
+                new THREE.Vector3(-0.707, 0, 0.707),
+                new THREE.Vector3(0.707, 0, -0.707),
+                new THREE.Vector3(-0.707, 0, -0.707)
+            ];
+
+            for (let i = 0; i < directions.length; i++) {
+                const dir = directions[i].clone();
+                const yaw = new THREE.Euler(0, mouseEuler.y, 0, 'YXZ');
+                dir.applyEuler(yaw);
+
+                const rayOrigin = position.clone();
+                rayOrigin.y = playerHeight / 2;
+
+                collisionHorizontalRays[i].set(rayOrigin, dir);
+                collisionHorizontalRays[i].far = collisionDistance;
+
+                const intersects = collisionHorizontalRays[i].intersectObjects(collidableObjects, true);
+                if (intersects.length > 0) {
+                    const pushBack = dir.clone().negate().multiplyScalar(collisionDistance - intersects[0].distance);
+                    position.add(pushBack);
+                }
+            }
+
+            // Проверка земли - луч вниз из позиции ног
+            const footPosition = position.clone();
+            footPosition.y = position.y - playerHeight + 0.1; // Начинаем чуть выше ног
+            
+            collisionDownRay.set(footPosition, new THREE.Vector3(0, -1, 0));
+            collisionDownRay.far = 0.3; // Небольшое расстояние для проверки земли
+            const floorIntersects = collisionDownRay.intersectObjects(collidableObjects, true);
+
+            let onGround = false;
+            if (floorIntersects.length > 0) {
+                const floorY = floorIntersects[0].point.y;
+                const distanceToFloor = footPosition.y - floorY;
+                
+                // Если расстояние до земли меньше порога - считаем что на земле
+                if (distanceToFloor <= groundThreshold) {
+                    onGround = true;
+                    position.y = floorY + playerHeight;
+                    state.velocity.y = Math.max(0, state.velocity.y);
+                }
+            }
+            
+            // Также проверяем абсолютную высоту - если ниже уровня земли, то на земле
+            if (position.y <= playerHeight + 0.05) {
+                onGround = true;
+                if (position.y < playerHeight) {
+                    position.y = playerHeight;
+                }
+                state.velocity.y = Math.max(0, state.velocity.y);
+            }
+            
+            // Устанавливаем canJump только если на земле И вертикальная скорость близка к 0
+            if (onGround && state.velocity.y < 0.5) {
+                state.canJump = true;
+                state.velocity.y = 0;
+            } else {
+                state.canJump = false;
+            }
+
+            // Проверка потолка
+            const headPosition = position.clone();
+            headPosition.y = position.y;
+            collisionDownRay.set(headPosition, new THREE.Vector3(0, 1, 0));
+            collisionDownRay.far = 0.5;
+            const ceilingIntersects = collisionDownRay.intersectObjects(collidableObjects, true);
+            if (ceilingIntersects.length > 0 && state.velocity.y > 0) {
+                const ceilingY = ceilingIntersects[0].point.y;
+                if (position.y > ceilingY - playerHeight) {
+                    position.y = ceilingY - playerHeight;
+                    state.velocity.y = 0;
+                }
+            }
+        }
+
+        // Load models
+        const gltfLoader = new THREE.GLTFLoader();
+        let modelLoaded = false;
+
+        gltfLoader.load('gun/scene.gltf', function(gltf) {
+            gunModel = gltf.scene;
+            gunModel.scale.set(0.05, 0.05, 0.05);
+            gunModel.rotation.set(0, 0, 0);
+            gunModel.rotation.x = -Math.PI / 2;
+            gunModel.rotation.y = Math.PI / 2;
+            gunModel.rotation.z = 0;
+            gunModel.position.set(0, 0, 0);
+
+            gunContainer.add(gunModel);
+            viewmodel.position.set(0.25, -0.3, -0.4);
+            viewmodel.rotation.set(0, 0, 0);
+
+            gunModel.visible = true;
+
+            weaponSway.init(mouseEuler.y, mouseEuler.x);
+            
+            // Устанавливаем базовую позицию ADS равной позиции viewmodel
+            ads.basePosition.copy(viewmodel.position);
+            ads.baseRotation.copy(viewmodel.rotation);
+            
+            console.log('Gun model loaded');
+        }, undefined, function(error) {
+            console.error('Error loading gun model:', error);
+        });
+
+        // Загрузка модели дробовика
+        // ============================================================
+        // ОСНОВНЫЕ НАСТРОЙКИ ДРОБОВИКА:
+        //   масштаб (scale) - увеличьте значение если дробовик слишком маленький
+        //   поворот (rotation.x/y/z) - вращение по осям
+        //   позиция (position) - координаты X, Y, Z
+        //
+        // ТОНКАЯ НАСТРОЙКА (если дробовик выглядит криво):
+        //   shotgunModel.position.x += 0.05;  // двигать вправо/влево
+        //   shotgunModel.position.y += 0.05;  // двигать вверх/вниз
+        //   shotgunModel.position.z += 0.10;  // двигать вперёд/назад
+        //   shotgunModel.scale.set(0.06, 0.06, 0.06); // увеличить/уменьшить
+        // ============================================================
+        gltfLoader.load('shotgun/scene.gltf', function(gltf) {
+            shotgunModel = gltf.scene;
+            shotgunModel.scale.set(3, 3, 2); // <-- МАСШТАБ (как у пистолета)
+            shotgunModel.rotation.set(0, 0, 0);
+            shotgunModel.rotation.x = -Math.PI / 45;   // <-- ПОВОРОТ X
+            shotgunModel.rotation.y = 0;    // <-- ПОВОРОТ Y (дуло вперёд)
+            shotgunModel.rotation.z = 0;              // <-- ПОВОРОТ Z (0°)
+            shotgunModel.position.set(0.0, -0.0, -0.3);   // <-- ПОЗИЦИЯ (у правого бока)
+
+            shotgunContainer.add(shotgunModel);
+            
+            // По умолчанию дробовик скрыт
+            shotgunModel.visible = false;
+            
+            console.log('Shotgun model loaded');
+        }, undefined, function(error) {
+            console.error('Error loading shotgun model:', error);
+        });
+
+        // ========== НАСТРОЙКИ ПОЗИЦИИ ДРОБОВИКА ==========
+        // Позиция дробовика для разных состояний
+        const shotgunPositions = {
+            // Позиция при беге (sprinting)
+            sprint: {
+                position: new THREE.Vector3(0.10, -0.10, -0.8),
+                rotation: new THREE.Euler(-Math.PI / 1.3, Math.PI / 4, 4)
+            },
+            // Позиция в idle/ходьбе (базовая позиция)
+            idle: {
+                position: new THREE.Vector3(0.25, -0.3, -0.4),
+                rotation: new THREE.Euler(Math.PI / 2, -Math.PI / 30, Math.PI / 15)
+            }
+        };
+        // ========== КОНЕЦ НАСТРОЕК ПОЗИЦИИ ДРОБОВИКА ==========
+
+        // ========== OCCLUSION CULLING SYSTEM (только frustum culling) ==========
+        const occlusionCulling = {
+            frustum: new THREE.Frustum(),
+            projScreenMatrix: new THREE.Matrix4(),
+            meshesToCull: [],
+            cullDistance: 150, // Увеличенное расстояние видимости для пола
+            enabled: true,
+            debugMode: false,
+            culledCount: 0,
+            totalCount: 0,
+            
+            init: function() {
+                console.log('Occlusion culling initialized with distance:', this.cullDistance);
+            },
+            
+            addMesh: function(mesh) {
+                if (mesh.isMesh) {
+                    // Вычисляем bounding sphere для быстрой проверки расстояния
+                    if (!mesh.geometry.boundingSphere) {
+                        mesh.geometry.computeBoundingSphere();
+                    }
+                    this.meshesToCull.push(mesh);
+                }
+            },
+            
+            update: function(camera) {
+                if (!this.enabled) {
+                    // Показываем всё, если отключено
+                    this.meshesToCull.forEach(mesh => {
+                        mesh.visible = true;
+                    });
+                    return;
+                }
+                
+                this.culledCount = 0;
+                this.totalCount = this.meshesToCull.length;
+                
+                // Обновляем фрустум
+                this.projScreenMatrix.multiplyMatrices(
+                    camera.projectionMatrix,
+                    camera.matrixWorldInverse
+                );
+                this.frustum.setFromProjectionMatrix(this.projScreenMatrix);
+                
+                const cameraPosition = camera.position;
+                const cullDistSq = this.cullDistance * this.cullDistance;
+                
+                for (let i = 0; i < this.meshesToCull.length; i++) {
+                    const mesh = this.meshesToCull[i];
+                    let shouldShow = true;
+                    
+                    // 1. Проверяем расстояние до камеры (только очень далекие объекты)
+                    const meshPosition = mesh.getWorldPosition(new THREE.Vector3());
+                    const distSq = meshPosition.distanceToSquared(cameraPosition);
+                    
+                    if (distSq > cullDistSq) {
+                        shouldShow = false;
+                    }
+                    
+                    // 2. Проверяем фрустум (только если объект в пределах расстояния)
+                    if (shouldShow && mesh.geometry.boundingSphere) {
+                        const worldSphere = mesh.geometry.boundingSphere.clone();
+                        worldSphere.applyMatrix4(mesh.matrixWorld);
+                        
+                        if (!this.frustum.intersectsSphere(worldSphere)) {
+                            shouldShow = false;
+                        }
+                    }
+                    
+                    // Применяем видимость
+                    if (mesh.visible !== shouldShow) {
+                        mesh.visible = shouldShow;
+                    }
+                    
+                    if (!shouldShow) {
+                        this.culledCount++;
+                    }
+                }
+                
+                // Отладка
+                if (this.debugMode && this.totalCount > 0) {
+                    console.log(`Culling: ${this.culledCount}/${this.totalCount} meshes hidden (${Math.round(this.culledCount/this.totalCount*100)}%)`);
+                }
+            }
+        };
+        
+        gltfLoader.load('placee/scene.gltf', function(gltf) {
+            const model = gltf.scene;
+            const lampPositions = [];
+            
+            model.traverse(function(child) {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    collidableObjects.push(child);
+                    // Добавляем меш в систему occlusion culling
+                    occlusionCulling.addMesh(child);
+                    
+                    // Ищем лампы/фонари в модели по имени или материалу
+                    const name = child.name.toLowerCase();
+                    if (name.includes('lamp') || name.includes('light') || name.includes('фонарь') || 
+                        name.includes('свет') || name.includes('lantern') || name.includes('street') ||
+                        (child.material && child.material.emissive && child.material.emissive.getHex() > 0x555555)) {
+                        
+                        const worldPos = new THREE.Vector3();
+                        child.getWorldPosition(worldPos);
+                        lampPositions.push({
+                            position: worldPos,
+                            mesh: child
+                        });
+                    }
+                }
+            });
+            
+            scene.add(model);
+            modelLoaded = true;
+            occlusionCulling.init();
+            console.log('Placee model loaded, lamps found:', lampPositions.length);
+            
+            // Удалено: искусственное освещение ламп (теперь только дневной свет с неба)
+            console.log('Lamps found but no artificial lights added - using daylight only');
+            
+            // Если ламп не найдено, используем стандартные позиции
+            if (lampPositions.length === 0) {
+                console.log('No lamps found in model, using default positions');
+            }
+        }, undefined, function(error) {
+            console.error('Error loading placee model:', error);
+            createFallbackEnvironment();
+        });
+
+        function createFallbackEnvironment() {
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(100, 100),
+                new THREE.MeshLambertMaterial({ color: 0x5a6b4a })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            collidableObjects.push(ground);
+            occlusionCulling.addMesh(ground);
+
+            createBuilding(0, -10, 20, 5, 1, 0x666666);
+            createBuilding(-10, 0, 1, 5, 20, 0x777777);
+            createBuilding(10, 0, 1, 5, 20, 0x777777);
+            occlusionCulling.init();
+        }
+
+        function createBuilding(x, z, width, height, depth, color) {
+            const geometry = new THREE.BoxGeometry(width, height, depth);
+            const material = new THREE.MeshLambertMaterial({ color: color });
+            const building = new THREE.Mesh(geometry, material);
+            building.position.set(x, height / 2, z);
+            building.castShadow = true;
+            building.receiveShadow = true;
+            scene.add(building);
+            collidableObjects.push(building);
+            occlusionCulling.addMesh(building);
+            return building;
+        }
+
+        // Post-processing
+        const postScene = new THREE.Scene();
+        const postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+        const renderTarget = new THREE.WebGLRenderTarget(
+            window.innerWidth, window.innerHeight,
+            {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.NearestFilter,
+                depthBuffer: true,
+                stencilBuffer: false,
+                generateMipmaps: false
+            }
+        );
+
+        const bodycamShader = {
+            uniforms: {
+                tDiffuse: { value: null },
+                time: { value: 0 },
+                distortion: { value: 0.25 }, // Дисторсия линзы камеры (оставляем)
+                chromaticAmount: { value: 0.0033 }, // Хроматическая аберрация (+10% от 0.003)
+                resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+                mouseVelocity: { value: 0.0 },
+                grainIntensity: { value: 0.0 }, // Зернистость (убрана)
+                scanlineIntensity: { value: 0.0 }, // Scanlines (убраны)
+                flickerAmount: { value: 0.0 } // Мерцание (убрано)
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float time;
+                uniform float distortion;
+                uniform float chromaticAmount;
+                uniform vec2 resolution;
+                uniform float mouseVelocity;
+                uniform float grainIntensity;
+                uniform float scanlineIntensity;
+                uniform float flickerAmount;
+                varying vec2 vUv;
+
+                // Функция для виньетирования
+                float vignette(vec2 uv, float amount) {
+                    vec2 center = uv - 0.5;
+                    float dist = length(center);
+                    return smoothstep(0.8, 0.2, dist * amount);
+                }
+
+                // Функция для бочкообразной дисторсии с усилением по краям
+                vec2 barrelDistortion(vec2 uv, float amount, float edgeAmount) {
+                    vec2 center = uv - 0.5;
+                    float r2 = center.x * center.x + center.y * center.y;
+                    float r = sqrt(r2);
+                    // Усиливаем дисторсию по краям
+                    float distortionFactor = amount + edgeAmount * r;
+                    float dist = 1.0 + distortionFactor * r2 + distortionFactor * distortionFactor * r2 * r2;
+                    return center * dist + 0.5;
+                }
+
+                // Функция для ряби (волновой эффект)
+                vec2 ripple(vec2 uv, float time, float strength) {
+                    float wave = sin(uv.y * 20.0 + time * 3.0) * strength;
+                    return vec2(uv.x + wave, uv.y);
+                }
+
+                // Псевдослучайная функция
+                float random(vec2 st) {
+                    return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+                }
+
+                // Шум (зернистость)
+                float noise(vec2 st) {
+                    vec2 i = floor(st);
+                    vec2 f = fract(st);
+                    float a = random(i);
+                    float b = random(i + vec2(1.0, 0.0));
+                    float c = random(i + vec2(0.0, 1.0));
+                    float d = random(i + vec2(1.0, 1.0));
+                    vec2 u = f * f * (3.0 - 2.0 * f);
+                    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+                }
+
+                // Функция для film grain
+                float filmGrain(vec2 uv, float intensity) {
+                    float grain = random(uv + time * 10.0) * 2.0 - 1.0;
+                    return grain * intensity;
+                }
+
+                // Функция для scanlines
+                float scanlines(vec2 uv, float intensity) {
+                    float scanline = sin(uv.y * resolution.y * 0.5 + time * 5.0) * 0.5 + 0.5;
+                    return 1.0 - scanline * intensity * 0.5;
+                }
+
+                // Функция для мерцания
+                float flicker(float t, float intensity) {
+                    float flicker1 = sin(t * 13.0) * 0.5 + 0.5;
+                    float flicker2 = sin(t * 7.3) * 0.5 + 0.5;
+                    float flicker3 = sin(t * 3.7) * 0.5 + 0.5;
+                    return 1.0 - (flicker1 * flicker2 * flicker3) * intensity;
+                }
+
+                void main() {
+                    // Вычисляем расстояние от центра для краевых эффектов
+                    float distFromCenter = length(vUv - 0.5);
+                    float edgeFactor = smoothstep(0.3, 0.8, distFromCenter);
+                    
+                    // Динамическая дисторсия на основе скорости мыши
+                    float dynamicDistortion = distortion + mouseVelocity * 0.1;
+                    
+                    // Применяем дисторсию с усилением по краям
+                    vec2 distortedUv = barrelDistortion(vUv, dynamicDistortion, edgeFactor * 0.15);
+                    
+                    // Добавляем легкую рябь (особенно по краям) - увеличена на 20% (с 0.0018 до 0.00216)
+                    distortedUv = ripple(distortedUv, time, 0.00216 * edgeFactor);
+
+                    // Обрезаем выходящие за границы
+                    if (distortedUv.x < 0.0 || distortedUv.x > 1.0 ||
+                        distortedUv.y < 0.0 || distortedUv.y > 1.0) {
+                        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                        return;
+                    }
+
+                    // Хроматическая аберрация (усиленная по краям)
+                    float aberrStrength = chromaticAmount * (1.0 + edgeFactor * 2.0);
+                    float aberrX = aberrStrength * (distortedUv.x - 0.5);
+                    float aberrY = aberrStrength * (distortedUv.y - 0.5);
+
+                    // Сэмплируем цвета с разным смещением для RGB каналов
+                    float r = texture2D(tDiffuse, distortedUv + vec2(aberrX, aberrY)).r;
+                    float g = texture2D(tDiffuse, distortedUv).g;
+                    float b = texture2D(tDiffuse, distortedUv - vec2(aberrX, aberrY)).b;
+
+                    vec3 color = vec3(r, g, b);
+                    
+                    // Легкий серый фильтр (bodycam стиль) - уменьшен для дневного света
+                    color = mix(color, vec3(dot(color, vec3(0.299, 0.587, 0.114))), 0.1);
+                    
+                    // Цветовая коррекция (дневной свет - более тёплый)
+                    color *= vec3(1.02, 1.0, 0.96);
+                    
+                    // Контраст - уменьшен для дневного освещения
+                    color = (color - 0.5) * 1.08 + 0.5;
+
+                    // Виньетирование (затемнение краев) - уменьшено для дневного света
+                    float vignetteValue = vignette(vUv, 0.35);
+                    color *= vignetteValue;
+
+                    // Добавляем film grain (зернистость)
+                    float grain = filmGrain(vUv * resolution, grainIntensity);
+                    color += grain;
+
+                    // Добавляем scanlines
+                    float scanlineValue = scanlines(vUv, scanlineIntensity);
+                    color *= scanlineValue;
+
+                    // Добавляем мерцание
+                    float flickerValue = flicker(time, flickerAmount);
+                    color *= flickerValue;
+
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `
+        };
+
+        const postMaterial = new THREE.ShaderMaterial(bodycamShader);
+        const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMaterial);
+        postScene.add(postQuad);
+
+        // Дневное фоновое освещение
+        const ambientLight = new THREE.AmbientLight(0xc8d8e8, 1.0);
+        scene.add(ambientLight);
+
+        // Массив для частиц (только для ламп из модели)
+        const streetLights = [];
+
+        // ========== ФОНАРЬ ПРИКРЕПЛЁННЫЙ К ПЕРСОНАЖУ ==========
+        const flashlight = {
+            enabled: false,
+            spotLight: null,
+            pointLight: null,
+            glow: null,
+            container: null,
+            dustParticles: null,
+            dustVelocities: null,
+            fogClearZone: null
+        };
+
+        // Сохраняем оригинальную плотность тумана для восстановления
+        const originalFogDensity = 0.15;
+        let currentFogDensity = originalFogDensity;
+        let targetFogDensity = originalFogDensity;
+
+        // Создаем фонарь прикреплённый к камере (персонажу)
+        function createFlashlight() {
+            // Контейнер фонаря, прикреплённый к камере
+            flashlight.container = new THREE.Object3D();
+            // Позиция фонаря: справа снизу от камеры (как тактический фонарь)
+            flashlight.container.position.set(0.3, -0.3, -0.5);
+            camera.add(flashlight.container);
+
+            // === SpotLight направленный вперёд ===
+            // СВЕТ ФОНАРЯ (тусклый, радиус 2м, круговой свет)
+            flashlight.spotLight = new THREE.SpotLight(0xfff5e6, 2, 2, Math.PI * 0.9, 0.5, 1);
+            flashlight.spotLight.position.set(0, 0, 0);
+            flashlight.spotLight.target.position.set(0, 0, -15); // Направляем вперёд
+            flashlight.spotLight.castShadow = true;
+            flashlight.spotLight.shadow.mapSize.width = 1024;
+            flashlight.spotLight.shadow.mapSize.height = 1024;
+            flashlight.spotLight.shadow.bias = -0.0001;
+            flashlight.spotLight.visible = false;
+            flashlight.container.add(flashlight.spotLight);
+            flashlight.container.add(flashlight.spotLight.target);
+
+            // Точечный свет для мягкого заполнения вокруг (круговой, 2 метра)
+            flashlight.pointLight = new THREE.PointLight(0xfff5e6, 1.5, 2);
+            flashlight.pointLight.position.set(0, 0, 0);
+            flashlight.pointLight.visible = false;
+            flashlight.container.add(flashlight.pointLight);
+
+            // Визуальный эффект лампы (свечение) - УВЕЛИЧЕН
+            const glowGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+            const glowMaterial = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+            flashlight.glow = new THREE.Mesh(glowGeometry, glowMaterial);
+            flashlight.glow.position.set(0.15, -0.1, 0); // Сбоку от фонаря
+            flashlight.glow.visible = false;
+            flashlight.container.add(flashlight.glow);
+
+            // Пыль перед фонарем убрана - теперь частицы летают по всей карте
+
+            console.log('Flashlight created and attached to camera');
+        }
+
+        createFlashlight();
+
+        // Функция переключения фонаря
+        function toggleFlashlight() {
+            flashlight.enabled = !flashlight.enabled;
+            const isVisible = flashlight.enabled;
+            
+            flashlight.spotLight.visible = isVisible;
+            flashlight.pointLight.visible = isVisible;
+            flashlight.glow.visible = isVisible;
+            flashlight.dustParticles.visible = isVisible;
+            
+            showNotification(isVisible ? 'ФОНАРЬ ВКЛЮЧЕН' : 'ФОНАРЬ ВЫКЛЮЧЕН');
+            console.log('Flashlight:', isVisible ? 'ON' : 'OFF');
+        }
+
+        // Функция убирания/доставания пистолета
+        function toggleGunHolster() {
+            isGunHolstered = !isGunHolstered;
+            
+            if (isGunHolstered) {
+                // Прячем пистолет
+                gunModel.visible = false;
+                showNotification('ПИСТОЛЕТ УБРАН');
+            } else {
+                // Достаем пистолет
+                gunModel.visible = true;
+                showNotification('ПИСТОЛЕТ ДОСТАТ');
+            }
+            console.log('Gun holster:', isGunHolstered ? 'HOLSTERED' : 'DRAWN');
+        }
+
+        // Солнце - дневной свет с неба
+        const sun = new THREE.DirectionalLight(0xfff5e6, 2.0);
+        sun.position.set(50, 100, 50);
+        sun.castShadow = true;
+        sun.shadow.camera.left = -50;
+        sun.shadow.camera.right = 50;
+        sun.shadow.camera.top = 50;
+        sun.shadow.camera.bottom = -50;
+        sun.shadow.mapSize.width = 2048;
+        sun.shadow.mapSize.height = 2048;
+        scene.add(sun);
+
+        // Луна теперь скрыта (не видна днём)
+        const moon = new THREE.DirectionalLight(0xaaccff, 0.0); // Выключаем лунный свет днём
+        moon.position.set(-50, 100, -50);
+        scene.add(moon);
+
+        // Door system
+        let isIndoors = true;
+        let isTransitioning = false;
+        let transitionAlpha = 0;
+        let transitionTarget = 0;
+        const doorZones = [];
+
+        function createDoorMarker(position, normal, name) {
+            const geometry = new THREE.PlaneGeometry(1.5, 2.5);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00ff00,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.DoubleSide
+            });
+            const marker = new THREE.Mesh(geometry, material);
+            marker.position.copy(position);
+            marker.lookAt(position.clone().add(normal));
+            marker.userData = { isDoor: true, doorName: name };
+            scene.add(marker);
+            return marker;
+        }
+
+        function setupDoors() {
+            doorZones.push({
+                position: new THREE.Vector3(2, 0, 7),
+                normal: new THREE.Vector3(0, 0, -1),
+                name: 'Главный вход',
+                outsidePosition: new THREE.Vector3(2, 0, 12),
+                marker: null
+            });
+
+            doorZones.push({
+                position: new THREE.Vector3(-5, 0, -3),
+                normal: new THREE.Vector3(-1, 0, 0),
+                name: 'Служебный вход',
+                outsidePosition: new THREE.Vector3(-10, 0, -3),
+                marker: null
+            });
+
+            doorZones.forEach(door => {
+                door.marker = createDoorMarker(door.position, door.normal, door.name);
+            });
+        }
+
+        function checkDoorProximity() {
+            if (isTransitioning) return;
+
+            let nearDoor = null;
+            doorZones.forEach(door => {
+                const distance = camera.position.distanceTo(door.position);
+                if (distance < 2.5) {
+                    nearDoor = door;
+                }
+            });
+
+            if (nearDoor) {
+                showDoorHint(nearDoor.name);
+            } else {
+                hideDoorHint();
+            }
+        }
+
+        let doorHintElement = null;
+
+        function showDoorHint(doorName) {
+            if (!doorHintElement) {
+                doorHintElement = document.createElement('div');
+                doorHintElement.style.cssText = `
+                    position: fixed;
+                    top: 60%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    color: #fff;
+                    font-family: 'Courier New', monospace;
+                    font-size: 18px;
+                    text-shadow: 0 0 10px rgba(255,255,255,0.8);
+                    z-index: 70;
+                    pointer-events: none;
+                    text-align: center;
+                `;
+                document.body.appendChild(doorHintElement);
+            }
+            doorHintElement.textContent = `[E] ${doorName}`;
+            doorHintElement.style.display = 'block';
+        }
+
+        function hideDoorHint() {
+            if (doorHintElement) {
+                doorHintElement.style.display = 'none';
+            }
+        }
+
+        function tryOpenDoor() {
+            if (isTransitioning) return;
+
+            let nearestDoor = null;
+            let nearestDistance = 2.5;
+
+            doorZones.forEach(door => {
+                const distance = camera.position.distanceTo(door.position);
+                if (distance < nearestDistance) {
+                    nearestDoor = door;
+                    nearestDistance = distance;
+                }
+            });
+
+            if (nearestDoor) {
+                startTransition(nearestDoor);
+            }
+        }
+
+        function startTransition(door) {
+            isTransitioning = true;
+            transitionTarget = 1;
+
+            setTimeout(() => {
+                if (isIndoors) {
+                    // Выходим НАРУЖУ
+                    const targetPos = door.position.clone().add(door.normal.clone().multiplyScalar(-4));
+                    camera.position.copy(targetPos);
+                    camera.position.y = 1.7;
+
+                    ambientLight.intensity = 1.0;
+                    sun.intensity = 2.0;
+                    scene.fog.color.set(0x889999);
+                    scene.fog.density = 0.04;
+
+                    isIndoors = false;
+                } else {
+                    // Заходим ВНУТРЬ
+                    const targetPos = door.position.clone().add(door.normal.clone().multiplyScalar(2));
+                    camera.position.copy(targetPos);
+                    camera.position.y = 1.7;
+
+                    ambientLight.intensity = 0.6;
+                    sun.intensity = 0.8;
+                    scene.fog.color.set(0x2a2f35);
+                    scene.fog.density = 0.012;
+
+                    isIndoors = true;
+                }
+
+                transitionTarget = 0;
+
+                setTimeout(() => {
+                    isTransitioning = false;
+                }, 300);
+            }, 300);
+        }
+
+        const transitionOverlay = document.createElement('div');
+        transitionOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            opacity: 0;
+            z-index: 80;
+            pointer-events: none;
+            transition: opacity 0.5s ease-in-out;
+        `;
+        document.body.appendChild(transitionOverlay);
+
+        let lastTransitionOpacity = 0;
+        function updateTransition() {
+            if (isTransitioning || transitionAlpha > 0.01) {
+                transitionAlpha += (transitionTarget - transitionAlpha) * 0.1;
+                // Обновляем DOM только при изменении значения (с точностью до 0.01)
+                const roundedOpacity = Math.round(transitionAlpha * 100) / 100;
+                if (Math.abs(roundedOpacity - lastTransitionOpacity) > 0.01) {
+                    lastTransitionOpacity = roundedOpacity;
+                    transitionOverlay.style.opacity = roundedOpacity;
+                }
+            }
+        }
+
+        setTimeout(setupDoors, 1500);
+
+        // ========== INPUT HANDLING ==========
+        let isPointerLockRequested = false;
+
+        document.addEventListener('pointerlockchange', () => {
+            const locked = document.pointerLockElement === renderer.domElement;
+            state.isLocked = locked;
+            console.log('Pointer Lock:', locked ? 'ENABLED' : 'DISABLED');
+        });
+
+        document.addEventListener('pointerlockerror', () => {
+            console.error('Pointer Lock Error: Failed to lock pointer');
+            isPointerLockRequested = false;
+        });
+
+        // Click to lock pointer and start game
+        renderer.domElement.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            if (!document.pointerLockElement && !isPointerLockRequested) {
+                isPointerLockRequested = true;
+                renderer.domElement.requestPointerLock({ 
+                    unadjustedMovement: true
+                });
+                
+                setTimeout(() => {
+                    isPointerLockRequested = false;
+                }, 100);
+            }
+        });
+
+        const mouseEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+        const baseMouseSensitivity = 0.002;
+
+        // Функция для получения текущей чувствительности с учётом настройки
+        function getCurrentMouseSensitivity() {
+            return baseMouseSensitivity * (mouseSensitivityValue * 2); // диапазон 0.0002 - 0.004
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement !== renderer.domElement) return;
+            
+            const movementX = e.movementX || e.mozMovementX || 0;
+            const movementY = e.movementY || e.mozMovementY || 0;
+            
+            const currentSens = getCurrentMouseSensitivity();
+            mouseEuler.y -= movementX * currentSens;
+            mouseEuler.x -= movementY * currentSens;
+            mouseEuler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseEuler.x));
+            camera.quaternion.setFromEuler(mouseEuler);
+        });
+
+        document.addEventListener('keydown', (e) => {
+            switch (e.code) {
+                case 'KeyW': state.moveForward = true; break;
+                case 'KeyA': state.moveLeft = true; break;
+                case 'KeyS': state.moveBackward = true; break;
+                case 'KeyD': state.moveRight = true; break;
+                case 'ShiftLeft':
+                    // Бег только на левом Shift
+                    state.isSprinting = true;
+                    break;
+                case 'Space':
+                    if (state.canJump) { state.velocity.y = 8; state.canJump = false; }
+                    break;
+                case 'KeyE':
+                    tryOpenDoor();
+                    break;
+                case 'KeyR':
+                    reload();
+                    break;
+            }
+        });
+
+        // ========== CINEMA MODE (No HUD) ==========
+        let cinemaMode = false;
+
+        function toggleCinemaMode() {
+            cinemaMode = !cinemaMode;
+            const hud = document.getElementById('hud');
+            const staminaContainer = document.getElementById('stamina-container');
+            const sprintIndicator = document.getElementById('sprint-indicator');
+            const lensBorder = document.getElementById('lens-border');
+            
+            if (cinemaMode) {
+                // Скрываем HUD
+                hud.style.display = 'none';
+                staminaContainer.style.display = 'none';
+                sprintIndicator.style.display = 'none';
+                lensBorder.style.display = 'none';
+                showNotification('CINEMA MODE ON');
+            } else {
+                // Показываем HUD
+                hud.style.display = 'block';
+                staminaContainer.style.display = 'block';
+                sprintIndicator.style.display = 'block';
+                lensBorder.style.display = 'block';
+                showNotification('CINEMA MODE OFF');
+            }
+            console.log('Cinema mode:', cinemaMode ? 'ON' : 'OFF');
+        }
+
+        // Обработчик для фонаря (клавиша 2)
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Digit2' || e.key === '2') {
+                if (!e.repeat) {
+                    toggleFlashlight();
+                }
+            }
+        });
+
+        // Обработчик для Cinema Mode (ПРАВЫЙ SHIFT)
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ShiftRight' && !e.repeat) {
+                toggleCinemaMode();
+            }
+        });
+
+        // Обработчик для убирания/доставания пистолета (клавиша 1)
+        document.addEventListener('keydown', (e) => {
+            if ((e.code === 'Digit1' || e.key === '1') && !e.repeat) {
+                toggleGunHolster();
+            }
+        });
+
+        // ========== SHOTGUN CONTROLS ==========
+        // Обработчик для переключения на дробовик (клавиша 3)
+        document.addEventListener('keydown', (e) => {
+            if ((e.code === 'Digit3' || e.key === '3') && !e.repeat) {
+                toggleWeapon();
+            }
+        });
+        
+        // Обработчик для перезарядки дробовика (клавиша R, но только если дробовик активен)
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyR' && isShotgunActive && !e.repeat) {
+                reloadShotgun();
+            }
+        });
+        // ========== END SHOTGUN CONTROLS ==========
+
+        // Prevent context menu on right click
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Shooting with left click
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 0 && document.pointerLockElement === renderer.domElement) {
+                // Если активен дробовик - стреляем из него, иначе из пистолета
+                if (isShotgunActive) {
+                    shootShotgun();
+                } else {
+                    shoot();
+                }
+            }
+            // Right click - Aim Down Sights
+            if (e.button === 2 && document.pointerLockElement === renderer.domElement) {
+                ads.enterAim();
+            }
+        });
+
+        // Release right click - exit ADS
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 2) {
+                ads.exitAim();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'KeyW': state.moveForward = false; break;
+                case 'KeyA': state.moveLeft = false; break;
+                case 'KeyS': state.moveBackward = false; break;
+                case 'KeyD': state.moveRight = false; break;
+                case 'ShiftLeft':
+                    // Бег только на левом Shift
+                    state.isSprinting = false;
+                    break;
+            }
+        });
+
+        const clock = new THREE.Clock();
+        let headBobPhase = 0;
+        let isMoving = false;
+        let isJumping = false;
+
+        // Update timestamp
+        function updateTimestamp() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-US', {
+                year: 'numeric', month: '2-digit', day: '2-digit'
+            }).replace(/\//g, '/');
+            const timeStr = now.toLocaleTimeString('en-US', {
+                hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            document.getElementById('timestamp').textContent = `${dateStr} ${timeStr}`;
+        }
+        setInterval(updateTimestamp, 1000);
+        updateTimestamp();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1); // ограничение максимального delta
+            const elapsed = clock.getElapsedTime();
+
+            if (state.isLocked) {
+                // Gravity
+                state.velocity.y -= 20 * delta;
+
+                // Determine if we can sprint (enough stamina)
+                const canSprint = stamina.current > stamina.minSprint && state.isSprinting;
+                
+                // Calculate current speed based on sprint state
+                const targetSpeed = canSprint ? movement.sprintSpeed : movement.walkSpeed;
+                movement.currentSpeed += (targetSpeed - movement.currentSpeed) * Math.min(1, movement.sprintAcceleration * delta);
+
+                // Movement
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                forward.y = 0;
+                forward.normalize();
+
+                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                right.y = 0;
+                right.normalize();
+
+                const moveVector = new THREE.Vector3(0, 0, 0);
+                const speed = movement.currentSpeed;
+
+                if (state.moveForward) moveVector.addScaledVector(forward, speed * delta);
+                if (state.moveBackward) moveVector.addScaledVector(forward, -speed * delta);
+                if (state.moveLeft) moveVector.addScaledVector(right, -speed * delta);
+                if (state.moveRight) moveVector.addScaledVector(right, speed * delta);
+
+                if (modelLoaded) {
+                    const newPosition = camera.position.clone().add(moveVector);
+                    checkCollision(newPosition, moveVector);
+                    camera.position.copy(newPosition);
+                    camera.position.y += state.velocity.y * delta;
+
+                    if (camera.position.y < 1.7) {
+                        camera.position.y = 1.7;
+                        state.velocity.y = 0;
+                        state.canJump = true;
+                    }
+                } else {
+                    camera.position.add(moveVector);
+                    camera.position.y += state.velocity.y * delta;
+
+                    if (camera.position.y < 1.7) {
+                        camera.position.y = 1.7;
+                        state.velocity.y = 0;
+                        state.canJump = true;
+                    }
+                }
+
+                checkDoorProximity();
+
+                isMoving = state.moveForward || state.moveBackward || state.moveLeft || state.moveRight;
+                isJumping = camera.position.y > 2.1;
+
+                // ========== STAMINA MANAGEMENT ==========
+                if (canSprint && isMoving) {
+                    stamina.current = Math.max(0, stamina.current - stamina.drainRate * delta);
+                } else if (!isMoving || !state.isSprinting) {
+                    stamina.current = Math.min(stamina.max, stamina.current + stamina.recoverRate * delta);
+                }
+
+                // ========== FATIGUE SOUND (тяжёлые вздохи при низкой стамине) ==========
+                const fatigueThreshold = 25; // Красная полоска начинается с 25%
+                if (stamina.current <= fatigueThreshold && isMoving) {
+                    // Стамина в красной зоне и игрок движется - включаем звук усталости
+                    if (!fatigueSoundPlaying) {
+                        fatigueSound.play().catch(e => console.log('Fatigue sound failed:', e));
+                        fatigueSoundPlaying = true;
+                    }
+                    // Увеличиваем громкость по мере уменьшения стамины
+                    const fatigueAmount = 1 - (stamina.current / fatigueThreshold);
+                    fatigueSound.volume = 0.3 + fatigueAmount * 0.4; // от 0.3 до 0.7
+                } else {
+                    // Стамина восстановилась или игрок не движется - выключаем звук
+                    if (fatigueSoundPlaying) {
+                        fatigueSound.pause();
+                        fatigueSound.currentTime = 0;
+                        fatigueSoundPlaying = false;
+                    }
+                }
+
+                // Head bob phase for weapon animation only (no camera shake)
+                if (isMoving && !isJumping) {
+                    const sprintBobMultiplier = canSprint ? 1.8 : 1.0;
+                    const bobFrequency = movement.headBobFrequency * sprintBobMultiplier;
+                    headBobPhase += delta * bobFrequency;
+                }
+
+                // ========== WEAPON BEHAVIOR DURING SPRINT ==========
+                if (canSprint && isMoving) {
+                    weaponSway.setRunningParams();
+                } else if (ads.isAiming) {
+                    weaponSway.setAimingParams();
+                } else {
+                    weaponSway.setWalkingParams();
+                }
+
+
+                // Update stamina UI
+                updateStaminaUI();
+            }
+
+            // Update screen shake effect
+            screenShake.update(delta);
+            
+            // Update muzzle flash effect
+            muzzleFlash.update(delta);
+            
+            // Update weapon sway/inertia system with enhanced parameters
+            weaponSway.update(delta, mouseEuler.y, mouseEuler.x, isJumping, state.isSprinting && isMoving, stamina.current);
+            
+            // Update weapon animation system (holster/reload)
+            weaponAnimation.update(delta);
+
+            // Update ADS (Aim Down Sights) system
+            ads.update(delta);
+
+            // Update bullets (пистолет)
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                bullet.position.add(bullet.userData.velocity.clone().multiplyScalar(delta));
+                bullet.userData.life -= delta;
+
+                const bulletPrevPos = bullet.position.clone().sub(bullet.userData.velocity.clone().multiplyScalar(delta));
+                const bulletDir = bullet.userData.velocity.clone().normalize();
+                const bulletRay = new THREE.Raycaster(bulletPrevPos, bulletDir);
+                bulletRay.far = bullet.userData.velocity.length() * delta + 0.1;
+                const bulletHits = bulletRay.intersectObjects(collidableObjects, true);
+
+                if (bulletHits.length > 0 || bullet.userData.life <= 0) {
+                    if (bulletHits.length > 0) {
+                        const impact = new THREE.PointLight(0xff6600, 1, 2);
+                        impact.position.copy(bulletHits[0].point);
+                        scene.add(impact);
+                        setTimeout(() => scene.remove(impact), 100);
+                    }
+
+                    scene.remove(bullet);
+                    bullets.splice(i, 1);
+                }
+            }
+
+            // ========== SHOTGUN PELLETS UPDATE ==========
+            // Обновление дроби от дробовика
+            for (let i = shotgunPellets.length - 1; i >= 0; i--) {
+                const pellet = shotgunPellets[i];
+                pellet.position.add(pellet.userData.velocity.clone().multiplyScalar(delta));
+                pellet.userData.life -= delta;
+
+                const pelletPrevPos = pellet.position.clone().sub(pellet.userData.velocity.clone().multiplyScalar(delta));
+                const pelletDir = pellet.userData.velocity.clone().normalize();
+                const pelletRay = new THREE.Raycaster(pelletPrevPos, pelletDir);
+                pelletRay.far = pellet.userData.velocity.length() * delta + 0.1;
+                const pelletHits = pelletRay.intersectObjects(collidableObjects, true);
+
+                if (pelletHits.length > 0 || pellet.userData.life <= 0) {
+                    if (pelletHits.length > 0) {
+                        // Создаем эффект попадания для каждой дробинки
+                        const impact = new THREE.PointLight(0xff8800, 0.5, 1);
+                        impact.position.copy(pelletHits[0].point);
+                        scene.add(impact);
+                        setTimeout(() => scene.remove(impact), 50);
+                    }
+
+                    scene.remove(pellet);
+                    shotgunPellets.splice(i, 1);
+                }
+            }
+            // ========== END SHOTGUN PELLETS UPDATE ==========
+
+            // ========== SHOTGUN WEAPON SWAY ==========
+            // Применяем анимацию покачивания к дробовику (как у пистолета)
+            if (isShotgunActive && shotgunModel) {
+                // Базовая позиция дробовика
+                const shotgunBasePos = new THREE.Vector3(0.0, -0.0, -0.3);
+                const shotgunBaseRot = new THREE.Euler(-Math.PI / 45, Math.PI / -1, 0);
+                
+                // Вычисляем смещения на основе weaponSway (те же что и для пистолета)
+                const swayPos = weaponSway.swayOffset.clone();
+                const swayRot = weaponSway.swayRotOffset.clone();
+                
+                // Целевая позиция с учётом покачиваний
+                const targetPos = new THREE.Vector3(
+                    shotgunBasePos.x + swayPos.x,
+                    shotgunBasePos.y + swayPos.y,
+                    shotgunBasePos.z + swayPos.z
+                );
+                
+                const targetRot = new THREE.Euler(
+                    shotgunBaseRot.x + swayRot.x,
+                    shotgunBaseRot.y + swayRot.y,
+                    shotgunBaseRot.z + swayRot.z
+                );
+                
+                // Плавная интерполяция позиции
+                const swayLerpFactor = 1 - Math.exp(-weaponSway.followSpeed * delta);
+                shotgunContainer.position.lerp(targetPos, swayLerpFactor);
+                
+                shotgunContainer.rotation.x += (targetRot.x - shotgunContainer.rotation.x) * swayLerpFactor;
+                shotgunContainer.rotation.y += (targetRot.y - shotgunContainer.rotation.y) * swayLerpFactor;
+                shotgunContainer.rotation.z += (targetRot.z - shotgunContainer.rotation.z) * swayLerpFactor;
+            }
+            // ========== END SHOTGUN WEAPON SWAY ==========
+
+            // Occlusion culling update
+            occlusionCulling.update(camera);
+            
+            // Анимация частиц пыли - бесконечный поток справа налево
+            streetLights.forEach(light => {
+                if (light.type === 'dust') {
+                    const positions = light.mesh.geometry.attributes.position.array;
+                    const velocities = light.velocities;
+                    const baseX = light.mesh.userData.originalY; // Базовая X позиция
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        positions[i] += velocities[i];     // X - движение влево
+                        positions[i + 1] += velocities[i + 1]; // Y - движение вверх
+                        positions[i + 2] += velocities[i + 2]; // Z - небольшой дрейф
+                        
+                        // Если частица улетела влево за границу - телепортируем справа
+                        if (positions[i] < baseX - 8) {
+                            positions[i] = baseX + 4; // Появляется справа
+                            positions[i + 1] = baseX - Math.random() * 4; // Случайная высота
+                            positions[i + 2] = (Math.random() - 0.5) * 2; // Случайный Z
+                        }
+                        
+                        // Если частица улетела слишком высоко - сбрасываем
+                        if (positions[i + 1] > baseX + 2) {
+                            positions[i + 1] = baseX - Math.random() * 3;
+                        }
+                    }
+                    
+                    light.mesh.geometry.attributes.position.needsUpdate = true;
+                }
+            });
+            
+            
+            // === ПОЛНОЕ УДАЛЕНИЕ TУМАНА ПРИ ВКЛЮЧЕННОМ ФОНАРЕ ===
+            // Когда фонарь включен, полностью убираем туман чтобы не было серой пелены
+            if (flashlight.enabled) {
+                // Целевая плотность - 0 (полностью убираем туман)
+                targetFogDensity = 0.0;
+            } else {
+                targetFogDensity = originalFogDensity;
+            }
+            
+            // Плавное изменение плотности тумана
+            currentFogDensity += (targetFogDensity - currentFogDensity) * delta * 2;
+            scene.fog.density = currentFogDensity;
+            
+            
+            updateTransition();
+            postMaterial.uniforms.time.value = elapsed;
+            // Обновляем скорость мыши для динамической дисторсии
+            if (state.isLocked) {
+                const mouseSpeed = Math.abs(mouseEuler.y - (mouseEuler.previousY || 0)) + Math.abs(mouseEuler.x - (mouseEuler.previousX || 0));
+                mouseEuler.previousY = mouseEuler.y;
+                mouseEuler.previousX = mouseEuler.x;
+                postMaterial.uniforms.mouseVelocity.value += (mouseSpeed - postMaterial.uniforms.mouseVelocity.value) * 0.1;
+            } else {
+                postMaterial.uniforms.mouseVelocity.value *= 0.95;
+            }
+
+            // === ИСПРАВЛЕНИЕ: Рендеринг с принудительной очисткой ===
+            // Рендерим основную сцену в renderTarget
+            renderer.setRenderTarget(renderTarget);
+            renderer.clear(); // обязательно очищаем перед рендерингом
+            renderer.render(scene, camera);
+
+            // Рендерим пост-обработку на экран
+            renderer.setRenderTarget(null);
+            renderer.clear(); // очищаем экранный буфер
+            postMaterial.uniforms.tDiffuse.value = renderTarget.texture;
+            renderer.render(postScene, postCamera);
+            
+            // Принудительно сообщаем браузеру, что контекст активен
+            renderer.resetState();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderTarget.setSize(window.innerWidth, window.innerHeight);
+            postMaterial.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
+        });
+
+        function openGameSettings() {
+            document.getElementById('game-settings-overlay').style.display = 'flex';
+            document.body.style.cursor = 'default';
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+        }
+
+        function closeGameSettings() {
+            document.getElementById('game-settings-overlay').style.display = 'none';
+            document.body.style.cursor = 'none';
+            renderer.domElement.requestPointerLock();
+        }
+
+        // Add Escape key handler for settings
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const settingsOverlay = document.getElementById('game-settings-overlay');
+                if (settingsOverlay.style.display === 'flex') {
+                    closeGameSettings();
+                } else {
+                    openGameSettings();
+                }
+            }
+        });
+
+        // Start with body cursor hidden
+        document.body.style.cursor = 'none';
+
+        // Smooth startup fade-in - синхронизировано с переходом из меню
+        setTimeout(() => {
+            const startupOverlay = document.getElementById('startup-overlay');
+            startupOverlay.style.opacity = '0';
+            setTimeout(() => {
+                startupOverlay.style.display = 'none';
+            }, 2000);
+        }, 1500);
+
+        animate();
+    </script>
+</body>
+</html>

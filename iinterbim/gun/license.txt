@@ -1,0 +1,11 @@
+Model Information:
+* title:	PSX Colt 1911
+* source:	https://sketchfab.com/3d-models/psx-colt-1911-a641c2fc061b4af0a4709bedb294f8af
+* author:	Hikimore (https://sketchfab.com/hikimore)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "PSX Colt 1911" (https://sketchfab.com/3d-models/psx-colt-1911-a641c2fc061b4af0a4709bedb294f8af) by Hikimore (https://sketchfab.com/hikimore) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
